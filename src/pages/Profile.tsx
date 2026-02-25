@@ -53,23 +53,23 @@ export default function Profile() {
         className="space-y-6"
       >
         {/* Profile Card */}
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
+        <div className="surface p-6">
           <div className="flex items-center gap-4">
             {user.photoURL ? (
               <img
                 src={user.photoURL}
                 alt="avatar"
-                className="w-16 h-16 rounded-full border-4 border-indigo-500"
+                className="w-16 h-16 rounded-full border-4 border-[color:var(--color-accent)]"
               />
             ) : (
-              <div className="w-16 h-16 rounded-full bg-indigo-700 flex items-center justify-center text-2xl font-bold text-white border-4 border-indigo-500">
+              <div className="w-16 h-16 rounded-full bg-[color:var(--color-surface-2)] flex items-center justify-center text-2xl font-bold text-white border-4 border-[color:var(--color-accent)]">
                 {profile.displayName[0]?.toUpperCase()}
               </div>
             )}
             <div>
               <h1 className="text-2xl font-bold text-white">{profile.displayName}</h1>
-              <p className="text-slate-400 text-sm">{profile.email}</p>
-              <p className="text-slate-500 text-xs mt-1">
+              <p className="text-[color:var(--color-text-muted)] text-sm">{profile.email}</p>
+              <p className="text-[color:var(--color-text-muted)] opacity-70 text-xs mt-1">
                 Member since {new Date(profile.createdAt).toLocaleDateString()}
               </p>
             </div>
@@ -84,27 +84,27 @@ export default function Profile() {
             { label: 'Win Rate', value: `${winRate}%`, color: 'text-indigo-400', icon: '📈' },
             { label: 'Losses', value: profile.totalGamesPlayed - profile.totalWins, color: 'text-red-400', icon: '💀' },
           ].map(({ label, value, color, icon }) => (
-            <div key={label} className="bg-slate-800 border border-slate-700 rounded-xl p-4 text-center">
+            <div key={label} className="surface-soft p-4 text-center rounded-xl">
               <div className="text-2xl mb-1">{icon}</div>
               <div className={`text-2xl font-bold ${color}`}>{value}</div>
-              <div className="text-slate-500 text-xs mt-1">{label}</div>
+              <div className="text-[color:var(--color-text-muted)] text-xs mt-1">{label}</div>
             </div>
           ))}
         </div>
 
         {/* High Scores */}
         {profile.highScores && Object.keys(profile.highScores).length > 0 && (
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
+          <div className="surface p-6">
             <h2 className="text-lg font-bold text-white mb-4">🏅 Best Scores</h2>
             <div className="grid sm:grid-cols-2 gap-3">
               {Object.entries(profile.highScores).map(([game, score]) => (
                 <div
                   key={game}
-                  className="flex items-center justify-between bg-slate-900 rounded-xl px-4 py-3"
+                  className="flex items-center justify-between surface-soft rounded-xl px-4 py-3"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-xl">{GAME_EMOJI[game] || '🎮'}</span>
-                    <span className="text-slate-300 text-sm capitalize">
+                    <span className="text-[color:var(--color-text-muted)] text-sm capitalize">
                       {game.replace('-', ' ')}
                     </span>
                   </div>
@@ -116,16 +116,16 @@ export default function Profile() {
         )}
 
         {/* Game History */}
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
+        <div className="surface p-6">
           <h2 className="text-lg font-bold text-white mb-4">📋 Recent Games</h2>
           {loading ? (
-            <p className="text-slate-500 text-sm">Loading...</p>
+            <p className="text-[color:var(--color-text-muted)] text-sm">Loading...</p>
           ) : history.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-slate-500">No games played yet.</p>
+              <p className="text-[color:var(--color-text-muted)]">No games played yet.</p>
               <Link
                 to="/lobby"
-                className="inline-block mt-3 px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-500 transition-colors"
+                className="btn btn-primary mt-3 px-6 py-2 text-sm"
               >
                 Play Now
               </Link>
@@ -135,7 +135,7 @@ export default function Profile() {
               {history.map((game, i) => (
                 <motion.div
                   key={game.id || i}
-                  className="flex items-center justify-between bg-slate-900 rounded-xl px-4 py-3"
+                  className="flex items-center justify-between surface-soft rounded-xl px-4 py-3"
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
@@ -147,7 +147,7 @@ export default function Profile() {
                         {game.gameType.replace('-', ' ')}
                         <span className="ml-1 text-xs text-slate-500">· {game.difficulty}</span>
                       </p>
-                      <p className="text-slate-500 text-xs">
+                      <p className="text-[color:var(--color-text-muted)] opacity-70 text-xs">
                         {game.moves} moves · {formatTime(game.timeSeconds)}
                       </p>
                     </div>

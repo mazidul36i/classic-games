@@ -45,68 +45,74 @@ export default function Login() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-2xl">
+        <div className="surface p-8">
           <div className="text-center mb-8">
-            <div className="text-4xl mb-3">🧠</div>
+            <div className="flex items-center justify-center mb-4">
+              <span className="badge mono">WELCOME</span>
+            </div>
             <h1 className="text-2xl font-bold text-white">Welcome back</h1>
-            <p className="text-slate-400 mt-1">Sign in to your account</p>
+            <p className="text-[color:var(--color-text-muted)] mt-1">Sign in to your account</p>
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-400 text-sm">
+            <div className="mb-4 p-3 bg-red-900/30 border border-red-700/70 rounded-lg text-red-200 text-sm">
               {error}
             </div>
           )}
 
           <form onSubmit={handleEmailLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-1.5">
+                Email
+              </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
-                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                className="input-field"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+              <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-1.5">
+                Password
+              </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Your password"
                 required
-                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                className="input-field"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 text-white font-semibold rounded-xl transition-colors"
+              className="btn btn-primary w-full py-3"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
 
           <div className="my-6 flex items-center gap-3">
-            <div className="flex-1 h-px bg-slate-700" />
-            <span className="text-slate-500 text-sm">or</span>
-            <div className="flex-1 h-px bg-slate-700" />
+            <div className="flex-1 h-px bg-slate-800" />
+            <span className="text-[color:var(--color-text-muted)] text-sm">or</span>
+            <div className="flex-1 h-px bg-slate-800" />
           </div>
 
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-600"
+            className="btn btn-ghost w-full py-3"
           >
-            <span className="text-lg">🔵</span> Continue with Google
+            Continue with Google
           </button>
 
-          <p className="text-center text-slate-400 text-sm mt-6">
+          <p className="text-center text-[color:var(--color-text-muted)] text-sm mt-6">
             Don't have an account?{' '}
-            <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium">
+            <Link to="/register" className="text-[color:var(--color-highlight)] hover:text-white font-medium">
               Sign up
             </Link>
           </p>

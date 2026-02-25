@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import { subscribeToRoom, flipCard, resolveFlip, incrementPlayerScore, setPlayerReady, leaveRoom } from '../firebase/realtime';
-import type { Room, RoomPlayer } from '../types/multiplayer.types';
-import type { CardItem } from '../types/game.types';
+import { useEffect, useRef, useState } from "react";
+import {
+  subscribeToRoom,
+  flipCard,
+  resolveFlip,
+  incrementPlayerScore,
+  setPlayerReady,
+  leaveRoom
+} from "../firebase/realtime";
+import type { Room, RoomPlayer } from "../types/multiplayer.types";
+import type { CardItem } from "../types/game.types";
 
 export const useMultiplayer = (roomId: string | null, currentUid: string | null) => {
   const [room, setRoom] = useState<Room | null>(null);
@@ -27,9 +34,10 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
   const handleFlipCard = async (cardId: string) => {
     if (!roomId || !room || !currentUid) return;
     const gs = room.gameState;
+    console.log("game state", gs);
     if (!gs) return;
     if (gs.currentTurn !== currentUid) return;
-    if (gs.flippedCards.length >= 2) return;
+    if (gs.flippedCards?.length >= 2) return;
 
     const card = gs.cards.find((c) => c.id === cardId);
     if (!card || card.isFlipped || card.isMatched) return;
@@ -37,7 +45,7 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     await flipCard(roomId, cardId);
 
     // After flipping, check if 2 cards are now flipped
-    const newFlipped = [...gs.flippedCards, cardId];
+    const newFlipped = [...gs.flippedCards || [], cardId];
     if (newFlipped.length === 2) {
       const [firstId, secondId] = newFlipped;
       const first = gs.cards.find((c) => c.id === firstId)!;
@@ -69,7 +77,7 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
         await resolveFlip(
           roomId,
           updatedCards,
-          matched ? currentUid : nextUid, // on match, same player gets another turn
+          matched ? currentUid : nextUid, // on match, the same player gets another turn
           newMatchedPairs,
           isComplete
         );

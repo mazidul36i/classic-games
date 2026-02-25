@@ -1,137 +1,167 @@
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 
 const GAMES = [
   {
-    id: 'card-flip',
-    title: 'Card Flip Match',
-    emoji: '🃏',
-    description: 'Find matching pairs in the classic concentration game. Single & Multiplayer.',
-    tags: ['Single Player', 'Multiplayer'],
-    color: 'from-indigo-600 to-purple-600',
-    href: '/lobby',
+    id: "card-flip",
+    title: "Card Flip Match",
+    badge: "CF",
+    description: "Find matching pairs in a polished concentration game. Single and multiplayer.",
+    tags: ["Single Player", "Multiplayer"],
+    tone: "from-teal-500/30 to-cyan-500/10",
+    href: "/lobby",
   },
   {
-    id: 'number-sequence',
-    title: 'Number Sequence',
-    emoji: '🔢',
-    description: 'Watch the number sequence flash and repeat it from memory. How far can you go?',
-    tags: ['Single Player'],
-    color: 'from-emerald-600 to-cyan-600',
-    href: '/play/number-sequence',
+    id: "number-sequence",
+    title: "Number Sequence",
+    badge: "NS",
+    description: "Memorize the flashing sequence and repeat it. Push your streak higher.",
+    tags: ["Single Player"],
+    tone: "from-sky-500/30 to-blue-500/10",
+    href: "/play/number-sequence",
   },
   {
-    id: 'pattern-memory',
-    title: 'Pattern Memory',
-    emoji: '🔲',
-    description: 'Observe the highlighted grid pattern and recreate it. Levels get harder!',
-    tags: ['Single Player'],
-    color: 'from-amber-600 to-orange-600',
-    href: '/play/pattern-memory',
+    id: "pattern-memory",
+    title: "Pattern Memory",
+    badge: "PM",
+    description: "Study the grid pattern and recreate it. Levels scale fast.",
+    tags: ["Single Player"],
+    tone: "from-amber-500/35 to-orange-500/10",
+    href: "/play/pattern-memory",
   },
   {
-    id: 'word-match',
-    title: 'Word Match',
-    emoji: '🔤',
-    description: 'Match words with their pairs hidden under cards. Great for vocabulary!',
-    tags: ['Single Player', 'Multiplayer'],
-    color: 'from-rose-600 to-pink-600',
-    href: '/lobby',
+    id: "word-match",
+    title: "Word Match",
+    badge: "WM",
+    description: "Match word pairs hidden under cards. Great for vocabulary practice.",
+    tags: ["Single Player", "Multiplayer"],
+    tone: "from-rose-500/30 to-red-500/10",
+    href: "/lobby",
+  },
+];
+
+const FEATURES = [
+  {
+    tag: "THEMES",
+    title: "Multiple Themes",
+    desc: "Colors, emojis, numbers, animals, and symbols with fresh layouts.",
+  },
+  {
+    tag: "REALTIME",
+    title: "Live Multiplayer",
+    desc: "Create rooms and compete with friends using instant updates.",
+  },
+  {
+    tag: "RANKED",
+    title: "Global Leaderboard",
+    desc: "Track high scores and climb the rankings per game and difficulty.",
   },
 ];
 
 export default function Home() {
   return (
     <div className="min-h-screen">
-      {/* Hero */}
-      <section className="relative overflow-hidden py-20 px-4">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/30 via-slate-900 to-purple-900/20" />
-        <div className="relative max-w-5xl mx-auto text-center">
+      {/* Hero Section */ }
+      <section className="relative overflow-hidden pt-10 pb-12 sm:pt-16 md:pt-20 sm:pb-16">
+        <div className="relative w-full max-w-5xl mx-auto px-6 sm:px-8 text-center">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            initial={ { opacity: 0, y: 30 } }
+            animate={ { opacity: 1, y: 0 } }
+            transition={ { duration: 0.6 } }
           >
-            <div className="text-7xl mb-6">🧠</div>
-            <h1 className="text-4xl sm:text-6xl font-bold text-white mb-4">
-              Memory{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
+            <div className="flex items-center justify-center mb-6">
+              <span className="badge mono">MEMORY LAB</span>
+            </div>
+            <h1 className="text-4xl sm:text-6xl font-bold text-white mb-5 leading-tight">
+              Memory{ " " }
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-teal-300 to-cyan-300">
                 Games
               </span>
             </h1>
-            <p className="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto mb-8">
-              Challenge your memory with classic games. Play solo, beat your high score, or compete
-              with friends in real-time multiplayer.
+            <p
+              className="text-base sm:text-lg text-text-muted max-w-xl mx-auto mb-10 leading-relaxed">
+              Train focus and recall with refined classics. Play solo, beat your best
+              time, or go head-to-head in multiplayer rooms.
             </p>
             <div className="flex items-center justify-center gap-4 flex-wrap">
               <Link
                 to="/lobby"
-                className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-indigo-500/20 text-lg"
+                className="btn btn-primary px-8 py-3.5 text-base"
               >
-                🎮 Play Now
+                Play Now
               </Link>
               <Link
                 to="/leaderboard"
-                className="px-8 py-3.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl transition-all border border-slate-700 text-lg"
+                className="btn btn-ghost px-8 py-3.5 text-base"
               >
-                🏆 Leaderboard
+                View Leaderboard
               </Link>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Games Grid */}
-      <section className="max-w-6xl mx-auto px-4 py-12">
-        <h2 className="text-2xl font-bold text-white mb-8 text-center">Classic Memory Games</h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {GAMES.map((game, i) => (
+      {/* Games Grid Section */ }
+      <section className="w-full max-w-5xl mx-auto px-6 sm:px-8 py-12 sm:py-16">
+        <h2 className="text-2xl font-bold text-white mb-10 text-center">
+          Classic Memory Games, Refined
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          { GAMES.map((game, i) => (
             <motion.div
-              key={game.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1, duration: 0.5 }}
+              key={ game.id }
+              className="flex"
+              initial={ { opacity: 0, y: 20 } }
+              animate={ { opacity: 1, y: 0 } }
+              transition={ { delay: i * 0.1, duration: 0.5 } }
             >
-              <Link to={game.href} className="block group">
-                <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden hover:border-indigo-500/50 transition-all duration-200 hover:-translate-y-1 shadow-lg">
-                  <div className={`h-24 bg-gradient-to-br ${game.color} flex items-center justify-center text-5xl`}>
-                    {game.emoji}
+              <Link to={ game.href } className="flex flex-1">
+                <div className="card overflow-hidden flex flex-col flex-1">
+                  <div className={ `h-24 bg-linear-to-br ${ game.tone } flex items-center justify-center shrink-0` }>
+                    <span className="logo-mark">{ game.badge }</span>
                   </div>
-                  <div className="p-4">
-                    <h3 className="font-bold text-white text-lg mb-1">{game.title}</h3>
-                    <p className="text-slate-400 text-sm mb-3 leading-relaxed">{game.description}</p>
-                    <div className="flex gap-2 flex-wrap">
-                      {game.tags.map((tag) => (
+                  <div className="p-5 flex flex-col flex-1">
+                    <h3 className="font-bold text-white text-base mb-2">{ game.title }</h3>
+                    <p className="text-text-muted text-sm leading-relaxed flex-1 mb-4">
+                      { game.description }
+                    </p>
+                    <div className="flex gap-2 flex-wrap mt-auto">
+                      { game.tags.map((tag) => (
                         <span
-                          key={tag}
-                          className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full"
+                          key={ tag }
+                          className="chip"
                         >
-                          {tag}
+                          { tag }
                         </span>
-                      ))}
+                      )) }
                     </div>
                   </div>
                 </div>
               </Link>
             </motion.div>
-          ))}
+          )) }
         </div>
       </section>
 
-      {/* Features */}
-      <section className="max-w-5xl mx-auto px-4 py-12">
-        <div className="grid md:grid-cols-3 gap-6">
-          {[
-            { icon: '🎭', title: 'Multiple Themes', desc: 'Colors, emojis, numbers, animals & symbols' },
-            { icon: '👥', title: 'Real-time Multiplayer', desc: 'Create rooms and play with friends live' },
-            { icon: '🏆', title: 'Global Leaderboard', desc: 'Compete for top scores on every game' },
-          ].map(({ icon, title, desc }) => (
-            <div key={title} className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
-              <div className="text-4xl mb-3">{icon}</div>
-              <h3 className="font-semibold text-white mb-2">{title}</h3>
-              <p className="text-slate-400 text-sm">{desc}</p>
-            </div>
-          ))}
+      {/* Features Section */ }
+      <section className="w-full max-w-5xl mx-auto px-6 sm:px-8 pt-4 pb-16 sm:pb-20">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          { FEATURES.map(({ tag, title, desc }, i) => (
+            <motion.div
+              key={ title }
+              initial={ { opacity: 0, y: 15 } }
+              animate={ { opacity: 1, y: 0 } }
+              transition={ { delay: 0.4 + i * 0.1, duration: 0.5 } }
+            >
+              <div className="surface-soft p-6 text-center rounded-2xl h-full">
+                <div className="flex items-center justify-center mb-4">
+                  <span className="badge mono">{ tag }</span>
+                </div>
+                <h3 className="font-semibold text-white mb-2">{ title }</h3>
+                <p className="text-text-muted text-sm leading-relaxed">{ desc }</p>
+              </div>
+            </motion.div>
+          )) }
         </div>
       </section>
     </div>

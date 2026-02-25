@@ -1,7 +1,7 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
-import { logout } from '../../firebase/auth';
-import { useAuthStore } from '../../store/authStore';
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../hooks/useAuth";
+import { logout } from "../../firebase/auth";
+import { useAuthStore } from "../../store/authStore";
 
 export default function Navbar() {
   const { user, isAuthenticated } = useAuth();
@@ -11,66 +11,60 @@ export default function Navbar() {
   const handleLogout = async () => {
     await logout();
     reset();
-    navigate('/');
+    navigate("/");
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur border-b border-slate-800">
+    <nav className="sticky top-0 z-50 surface-nav">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2">
-            <span className="text-2xl">🧠</span>
-            <span className="text-xl font-bold text-white">
-              Memory<span className="text-indigo-400">Games</span>
+          <Link to="/" className="flex items-center gap-3">
+            <span className="logo-mark">MG</span>
+            <span className="text-lg font-semibold text-white tracking-tight">
+              Memory<span className="text-accent"> Games</span>
             </span>
           </Link>
 
-          {/* Nav Links */}
           <div className="hidden md:flex items-center gap-6">
-            <Link
-              to="/"
-              className="text-slate-300 hover:text-white transition-colors text-sm font-medium"
-            >
-              Home
-            </Link>
-            <Link
-              to="/lobby"
-              className="text-slate-300 hover:text-white transition-colors text-sm font-medium"
-            >
-              Play
-            </Link>
-            <Link
-              to="/leaderboard"
-              className="text-slate-300 hover:text-white transition-colors text-sm font-medium"
-            >
-              Leaderboard
-            </Link>
+            { [
+              { to: "/", label: "Home" },
+              { to: "/lobby", label: "Play" },
+              { to: "/leaderboard", label: "Leaderboard" },
+            ].map((item) => (
+              <Link
+                key={ item.to }
+                to={ item.to }
+                className="text-sm font-medium text-text-muted hover:text-white transition-colors"
+              >
+                { item.label }
+              </Link>
+            )) }
           </div>
 
-          {/* Auth */}
           <div className="flex items-center gap-3">
-            {isAuthenticated ? (
+            { isAuthenticated ? (
               <>
                 <Link to="/profile" className="flex items-center gap-2 group">
-                  {user?.photoURL ? (
+                  { user?.photoURL ? (
                     <img
-                      src={user.photoURL}
+                      src={ user.photoURL }
                       alt="avatar"
-                      className="w-8 h-8 rounded-full border-2 border-indigo-500"
+                      className="w-8 h-8 rounded-full border border-accent"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold">
-                      {(user?.displayName || user?.email || 'P')[0].toUpperCase()}
+                    <div
+                      className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-[#072225] text-sm font-bold">
+                      { (user?.displayName || user?.email || "P")[0].toUpperCase() }
                     </div>
-                  )}
-                  <span className="text-slate-300 text-sm group-hover:text-white transition-colors hidden md:block">
-                    {user?.displayName || 'Player'}
+                  ) }
+                  <span
+                    className="text-sm text-text-muted group-hover:text-white transition-colors hidden md:block">
+                    { user?.displayName || "Player" }
                   </span>
                 </Link>
                 <button
-                  onClick={handleLogout}
-                  className="px-3 py-1.5 text-sm text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-all"
+                  onClick={ handleLogout }
+                  className="btn btn-ghost px-3 py-1.5 text-sm"
                 >
                   Logout
                 </button>
@@ -79,18 +73,18 @@ export default function Navbar() {
               <>
                 <Link
                   to="/login"
-                  className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
+                  className="text-sm font-medium text-text-muted hover:text-white transition-colors"
                 >
                   Login
                 </Link>
                 <Link
                   to="/register"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+                  className="btn btn-primary px-4 py-2 text-sm"
                 >
                   Sign Up
                 </Link>
               </>
-            )}
+            ) }
           </div>
         </div>
       </div>

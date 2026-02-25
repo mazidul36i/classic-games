@@ -1,13 +1,14 @@
-import { useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import Card from '../../components/game/Card';
-import GameStats from '../../components/game/GameStats';
-import WinModal from '../../components/game/WinModal';
-import { useCardFlip } from '../../hooks/useCardFlip';
-import { useAuth } from '../../hooks/useAuth';
-import { saveGameResult } from '../../firebase/firestore';
-import type { Difficulty, CardTheme } from '../../types/game.types';
-import { getGridCols } from '../../utils/cardUtils';
+﻿import { useState, useCallback, type CSSProperties } from "react";
+import { motion } from "framer-motion";
+import Card from "../../components/game/Card";
+import GameStats from "../../components/game/GameStats";
+import WinModal from "../../components/game/WinModal";
+import { useCardFlip } from "../../hooks/useCardFlip";
+import { useAuth } from "../../hooks/useAuth";
+import { saveGameResult } from "../../firebase/firestore";
+import type { Difficulty, CardTheme } from "../../types/game.types";
+import { getGridCols } from "../../utils/cardUtils";
+import { ChevronLeft, RotateCcw } from "lucide-react";
 
 interface CardFlipGameProps {
   difficulty: Difficulty;
@@ -16,15 +17,9 @@ interface CardFlipGameProps {
 }
 
 const gridColsMap: Record<number, string> = {
-  4: 'grid-cols-4',
-  6: 'grid-cols-6',
-  8: 'grid-cols-8',
-};
-
-const cardSizeMap: Record<string, 'sm' | 'md' | 'lg'> = {
-  '4x4': 'lg',
-  '6x6': 'md',
-  '8x8': 'sm',
+  4: "grid-cols-4",
+  6: "grid-cols-6",
+  8: "grid-cols-8",
 };
 
 export default function CardFlipGame({ difficulty, theme, onBack }: CardFlipGameProps) {
@@ -44,9 +39,9 @@ export default function CardFlipGame({ difficulty, theme, onBack }: CardFlipGame
       if (user) {
         await saveGameResult({
           uid: user.uid,
-          displayName: user.displayName || 'Player',
-          gameType: 'card-flip',
-          mode: 'single',
+          displayName: user.displayName || "Player",
+          gameType: "card-flip",
+          mode: "single",
           difficulty,
           score,
           moves,
@@ -63,8 +58,13 @@ export default function CardFlipGame({ difficulty, theme, onBack }: CardFlipGame
     useCardFlip({ difficulty, theme, onComplete: handleComplete });
 
   const cols = getGridCols(difficulty);
-  const colClass = gridColsMap[cols] || 'grid-cols-4';
-  const cardSize = cardSizeMap[difficulty] || 'md';
+  const colClass = gridColsMap[cols] || "grid-cols-4";
+  const boardStyle: CSSProperties = {
+    "--board-cols": cols,
+    "--card-size":
+      "clamp(2.5rem, calc((100vw - 2rem - (var(--board-cols) - 1) * 0.5rem) / var(--board-cols)), 5.5rem)",
+  } as CSSProperties;
+  const cardSize = difficulty === "8x8" ? "sm" : "fluid";
 
   const handlePlayAgain = () => {
     setShowModal(false);
@@ -73,56 +73,55 @@ export default function CardFlipGame({ difficulty, theme, onBack }: CardFlipGame
 
   return (
     <div className="flex flex-col items-center gap-6 py-6 px-4">
-      {/* Header */}
+      {/* Header */ }
       <div className="flex items-center justify-between w-full max-w-3xl">
         <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+          onClick={ onBack }
+          className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
         >
-          ← Back
+          <ChevronLeft className="text-xl font-bold text-white mr-1" />
         </button>
         <h1 className="text-xl font-bold text-white">
           Card Flip Match
-          <span className="ml-2 text-xs bg-slate-700 text-slate-300 px-2 py-1 rounded-full font-normal">
-            {difficulty} · {theme}
-          </span>
         </h1>
         <button
-          onClick={restart}
-          className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          onClick={ restart }
+          className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
         >
-          Restart
+          <RotateCcw className="text-xl font-bold text-white" />
         </button>
       </div>
 
-      {/* Stats */}
-      <GameStats moves={moves} time={time} matched={matchedPairs} total={totalPairs} />
+      {/* Stats */ }
+      <GameStats moves={ moves } time={ time } matched={ matchedPairs } total={ totalPairs } />
 
-      {/* Game Board */}
+      {/* Game Board */ }
       <motion.div
-        className={`grid ${colClass} gap-2 sm:gap-3`}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        className={ `grid w-fit mx-auto ${ colClass } gap-2 sm:gap-3 place-items-center` }
+        style={ boardStyle }
+        initial={ { opacity: 0, y: 20 } }
+        animate={ { opacity: 1, y: 0 } }
+        transition={ { duration: 0.4 } }
       >
-        {cards.map((card) => (
+        { cards.map((card) => (
           <Card
-            key={card.id}
-            card={card}
-            onClick={flipCard}
-            size={cardSize}
-            disabled={isLocked || isComplete}
+            key={ card.id }
+            card={ card }
+            onClick={ flipCard }
+            size={ cardSize }
+            disabled={ isLocked || isComplete }
           />
-        ))}
+        )) }
       </motion.div>
 
       <WinModal
-        isOpen={showModal}
-        moves={finalMoves}
-        time={finalTime}
-        score={finalScore}
-        onPlayAgain={handlePlayAgain}
+        isOpen={ showModal }
+        moves={ finalMoves }
+        time={ finalTime }
+        score={ finalScore }
+        onPlayAgain={ handlePlayAgain }
       />
     </div>
   );
 }
+

@@ -1,35 +1,222 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #6366f1;
-  --color-primary-dark: #4f46e5;
-  --color-accent: #f59e0b;
-  --color-success: #10b981;
-  --color-danger: #ef4444;
-  --color-bg: #0f172a;
-  --color-surface: #1e293b;
-  --color-surface-2: #334155;
-  --color-text: #f1f5f9;
-  --color-text-muted: #94a3b8;
-  --font-sans: 'Inter', system-ui, sans-serif;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+  --color-ink: #0b1020;
+  --color-ink-2: #0f1630;
+  --color-surface: #151d3b;
+  --color-surface-2: #1b2550;
+  --color-border: #24305a;
+  --color-text: #e7eefb;
+  --color-text-muted: #9fb1c9;
+  --color-accent: #00c2a8;
+  --color-accent-2: #f5a524;
+  --color-highlight: #6ee7ff;
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 html, body, #root {
   height: 100%;
-  background-color: #0f172a;
-  color: #f1f5f9;
-  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-sans), serif;
+}
+
+body {
+  color-scheme: dark;
+}
+
+@layer base {
+  h1, h2, h3, h4 {
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  .app-background {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(900px 600px at 10% -10%, rgba(0, 194, 168, 0.25), transparent 60%),
+      radial-gradient(700px 500px at 90% -20%, rgba(245, 165, 36, 0.25), transparent 60%),
+      radial-gradient(500px 500px at 70% 10%, rgba(110, 231, 255, 0.18), transparent 60%),
+      linear-gradient(180deg, #0b1020 0%, #0b1020 100%);
+  }
+
+  .app-background::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.15;
+    mask-image: radial-gradient(circle at 50% 0%, rgba(0, 0, 0, 0.7), transparent 65%);
+  }
+
+  .surface {
+    background-color: rgba(21, 29, 59, 0.92);
+    border: 1px solid var(--color-border);
+    box-shadow: 0 24px 60px rgba(6, 10, 24, 0.35);
+    border-radius: 1.25rem;
+  }
+
+  .surface-soft {
+    background-color: rgba(27, 37, 80, 0.7);
+    border: 1px solid rgba(36, 48, 90, 0.7);
+    border-radius: 1rem;
+  }
+
+  .surface-nav {
+    background-color: rgba(11, 16, 32, 0.8);
+    border-bottom: 1px solid rgba(36, 48, 90, 0.8);
+    backdrop-filter: blur(14px);
+  }
+
+  .card {
+    background-color: rgba(21, 29, 59, 0.92);
+    border: 1px solid rgba(36, 48, 90, 0.9);
+    border-radius: 1.25rem;
+    transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+    box-shadow: 0 18px 40px rgba(6, 10, 24, 0.35);
+  }
+
+  .card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(110, 231, 255, 0.4);
+    box-shadow: 0 24px 60px rgba(6, 10, 24, 0.45);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.9rem;
+    font-weight: 600;
+    transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .btn-primary {
+    background-color: var(--color-accent);
+    color: #04161a;
+    box-shadow: 0 12px 24px rgba(0, 194, 168, 0.25);
+  }
+
+  .btn-primary:hover {
+    background-color: #10d9bc;
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary {
+    background-color: rgba(245, 165, 36, 0.18);
+    border: 1px solid rgba(245, 165, 36, 0.5);
+    color: #ffe0a4;
+  }
+
+  .btn-secondary:hover {
+    background-color: rgba(245, 165, 36, 0.28);
+  }
+
+  .btn-ghost {
+    border: 1px solid rgba(36, 48, 90, 0.9);
+    color: var(--color-text);
+    background-color: rgba(11, 16, 32, 0.4);
+  }
+
+  .btn-ghost:hover {
+    border-color: rgba(110, 231, 255, 0.5);
+    color: #d9f6ff;
+  }
+
+  .input-field {
+    width: 100%;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(36, 48, 90, 0.9);
+    background-color: rgba(11, 16, 32, 0.7);
+    color: var(--color-text);
+    padding: 0.7rem 1rem;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: rgba(0, 194, 168, 0.7);
+    box-shadow: 0 0 0 3px rgba(0, 194, 168, 0.18);
+  }
+
+  .chip {
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background-color: rgba(36, 48, 90, 0.7);
+    color: var(--color-text-muted);
+  }
+
+  .logo-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(0, 194, 168, 0.9), rgba(110, 231, 255, 0.85));
+    color: #052b2f;
+    font-weight: 700;
+    font-size: 0.85rem;
+    box-shadow: 0 10px 24px rgba(0, 194, 168, 0.35);
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+  }
+
+  .option-btn {
+    border-radius: 0.85rem;
+    border: 1px solid rgba(36, 48, 90, 0.9);
+    background-color: rgba(11, 16, 32, 0.55);
+    color: var(--color-text-muted);
+    transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  }
+
+  .option-btn:hover {
+    border-color: rgba(110, 231, 255, 0.45);
+    color: var(--color-text);
+  }
+
+  .option-btn-active {
+    border-color: rgba(0, 194, 168, 0.75);
+    background-color: rgba(0, 194, 168, 0.16);
+    color: var(--color-text);
+    box-shadow: 0 0 0 1px rgba(0, 194, 168, 0.2);
+  }
+
+  .badge {
+    padding: 0.4rem 0.7rem;
+    border-radius: 999px;
+    background-color: rgba(11, 16, 32, 0.7);
+    border: 1px solid rgba(36, 48, 90, 0.9);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
 }
 
 /* 3D Card flip styles */
 .card-scene {
   perspective: 700px;
+}
+
+.card-fluid {
+  width: var(--card-size);
+  height: var(--card-size);
+  font-size: calc(var(--card-size) * 0.45);
 }
 
 .card-inner {
@@ -61,9 +248,9 @@ html, body, #root {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: #111836;
 }
 ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: #2a396b;
   border-radius: 3px;
 }
