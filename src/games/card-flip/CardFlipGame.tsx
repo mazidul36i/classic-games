@@ -1,5 +1,6 @@
-﻿import { useState, useCallback, type CSSProperties } from "react";
+import { useState, useCallback, type CSSProperties } from "react";
 import { motion } from "framer-motion";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Card from "../../components/game/Card";
 import GameStats from "../../components/game/GameStats";
 import WinModal from "../../components/game/WinModal";
@@ -10,11 +11,8 @@ import type { Difficulty, CardTheme } from "../../types/game.types";
 import { getGridCols } from "../../utils/cardUtils";
 import { ChevronLeft, RotateCcw } from "lucide-react";
 
-interface CardFlipGameProps {
-  difficulty: Difficulty;
-  theme: CardTheme;
-  onBack: () => void;
-}
+const VALID_DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
+const VALID_THEMES: CardTheme[] = ["colors", "emojis", "numbers", "animals", "symbols"];
 
 const gridColsMap: Record<number, string> = {
   4: "grid-cols-4",
@@ -22,12 +20,20 @@ const gridColsMap: Record<number, string> = {
   8: "grid-cols-8",
 };
 
-export default function CardFlipGame({ difficulty, theme, onBack }: CardFlipGameProps) {
+export default function CardFlipGame() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
   const [finalScore, setFinalScore] = useState(0);
   const [finalMoves, setFinalMoves] = useState(0);
   const [finalTime, setFinalTime] = useState(0);
   const [showModal, setShowModal] = useState(false);
+
+  const rawDifficulty = params.get("difficulty") as Difficulty;
+  const rawTheme = params.get("theme") as CardTheme;
+
+  const difficulty: Difficulty = VALID_DIFFICULTIES.includes(rawDifficulty) ? rawDifficulty : "4x4";
+  const theme: CardTheme = VALID_THEMES.includes(rawTheme) ? rawTheme : "emojis";
 
   const handleComplete = useCallback(
     async (moves: number, timeSeconds: number, score: number) => {
@@ -73,55 +79,46 @@ export default function CardFlipGame({ difficulty, theme, onBack }: CardFlipGame
 
   return (
     <div className="flex flex-col items-center gap-6 py-6 px-4">
-      {/* Header */ }
+      {/* Header */}
       <div className="flex items-center justify-between w-full max-w-3xl">
         <button
-          onClick={ onBack }
+          onClick={() => navigate("/lobby")}
           className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
         >
           <ChevronLeft className="text-xl font-bold text-white mr-1" />
         </button>
-        <h1 className="text-xl font-bold text-white">
-          Card Flip Match
-        </h1>
+        <h1 className="text-xl font-bold text-white">Card Flip Match</h1>
         <button
-          onClick={ restart }
+          onClick={restart}
           className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
         >
           <RotateCcw className="text-xl font-bold text-white" />
         </button>
       </div>
 
-      {/* Stats */ }
-      <GameStats moves={ moves } time={ time } matched={ matchedPairs } total={ totalPairs } />
+      {/* Stats */}
+      <GameStats moves={moves} time={time} matched={matchedPairs} total={totalPairs} />
 
-      {/* Game Board */ }
+      {/* Game Board */}
       <motion.div
-        className={ `grid w-fit mx-auto ${ colClass } gap-2 sm:gap-3 place-items-center` }
-        style={ boardStyle }
-        initial={ { opacity: 0, y: 20 } }
-        animate={ { opacity: 1, y: 0 } }
-        transition={ { duration: 0.4 } }
+        className={`grid w-fit mx-auto ${colClass} gap-2 sm:gap-3 place-items-center`}
+        style={boardStyle}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
       >
-        { cards.map((card) => (
-          <Card
-            key={ card.id }
-            card={ card }
-            onClick={ flipCard }
-            size={ cardSize }
-            disabled={ isLocked || isComplete }
-          />
-        )) }
+        {cards.map((card) => (
+          <Card key={card.id} card={card} onClick={flipCard} size={cardSize} disabled={isLocked || isComplete} />
+        ))}
       </motion.div>
 
       <WinModal
-        isOpen={ showModal }
-        moves={ finalMoves }
-        time={ finalTime }
-        score={ finalScore }
-        onPlayAgain={ handlePlayAgain }
+        isOpen={showModal}
+        moves={finalMoves}
+        time={finalTime}
+        score={finalScore}
+        onPlayAgain={handlePlayAgain}
       />
     </div>
   );
 }
-
