@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
-import { createRoom, joinRoom } from "../firebase/realtime";
+import { createRoom, joinRoom, quickMatch } from "../firebase/realtime";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 import type { RoomPlayer } from "../types/multiplayer.types";
 import { ChevronLeft } from "lucide-react";
@@ -33,6 +33,7 @@ export default function GameLobby() {
   const [roomCode, setRoomCode] = useState("");
   const [joining, setJoining] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [matching, setMatching] = useState(false);
   const [error, setError] = useState("");
 
   const selectedGame = GAME_OPTIONS.find((g) => g.id === gameType)!;
@@ -98,6 +99,32 @@ export default function GameLobby() {
       setError("Failed to join room. Please try again.");
     } finally {
       setJoining(false);
+    }
+  };
+
+  const handleQuickMatch = async () => {
+    if (!isAuthenticated || !user) {
+      navigate("/login");
+      return;
+    }
+    setMatching(true);
+    setError("");
+    try {
+      const player: RoomPlayer = {
+        uid: user.uid,
+        displayName: user.displayName || "Player",
+        photoURL: user.photoURL || "",
+        score: 0,
+        isReady: false,
+        isCurrentTurn: false,
+        joinedAt: Date.now(),
+      };
+      const roomId = await quickMatch(player, gameType, difficulty, theme);
+      navigate(`/room/${ roomId }`);
+    } catch {
+      setError("Failed to find a match. Please try again.");
+    } finally {
+      setMatching(false);
     }
   };
 
@@ -223,8 +250,18 @@ export default function GameLobby() {
                 ) }
                 <div className="space-y-3">
                   <button
+                    onClick={ handleQuickMatch }
+                    disabled={ matching }
+                    className="btn btn-primary w-full py-3"
+                  >
+                    { matching ? "Matching..." : "Quick Match" }
+                  </button>
+                  <div className="pt-1">
+                    <p className="text-xs text-text-muted uppercase tracking-[0.16em] mb-2">Private Room</p>
+                  </div>
+                  <button
                     onClick={ handleCreateRoom }
-                    disabled={ creating }
+                    disabled={ creating || matching || joining }
                     className="btn btn-secondary w-full py-3"
                   >
                     { creating ? "Creating..." : "Create Room" }
@@ -240,7 +277,7 @@ export default function GameLobby() {
                     />
                     <button
                       onClick={ handleJoinRoom }
-                      disabled={ joining }
+                      disabled={ joining || creating || matching }
                       className="btn btn-ghost px-4 py-2.5 text-sm"
                     >
                       { joining ? "..." : "Join" }

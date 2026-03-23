@@ -60,6 +60,7 @@ export default function MultiplayerRoom() {
   const isHost = room.hostId === user?.uid;
   const allReady = players.length >= 2 && players.every((p) => p.isReady);
   const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+  const maxPlayers = room.maxPlayers ?? 4;
 
   const winner = showResult
     ? sortedPlayers[0]
@@ -146,7 +147,7 @@ export default function MultiplayerRoom() {
           </div>
         )) }
         {/* Empty slots */ }
-        { Array.from({ length: Math.max(0, 2 - players.length) }).map((_, i) => (
+        { Array.from({ length: Math.max(0, maxPlayers - players.length) }).map((_, i) => (
           <div
             key={ `empty-${ i }` }
             className="bg-slate-800/50 border border-dashed border-slate-700 rounded-xl p-3 flex items-center justify-center"

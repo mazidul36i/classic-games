@@ -23,12 +23,18 @@ export const createRoom = async (
   hostPlayer: RoomPlayer,
   gameType: GameType,
   difficulty: Difficulty,
-  theme: CardTheme
+  theme: CardTheme,
+  options?: {
+    isPrivate?: boolean;
+    maxPlayers?: number;
+  }
 ): Promise<string> => {
   const roomId = generateRoomCode();
   const roomRef = ref(rtdb, `rooms/${roomId}`);
   const room: Omit<Room, 'id'> = {
     hostId: hostPlayer.uid,
+    isPrivate: options?.isPrivate ?? true,
+    maxPlayers: options?.maxPlayers ?? 4,
     status: 'waiting',
     gameType,
     difficulty,
@@ -48,11 +54,53 @@ export const joinRoom = async (roomId: string, player: RoomPlayer): Promise<bool
   if (!snap.exists()) return false;
   const room = snap.val() as Room;
   if (room.status !== 'waiting') return false;
-  if (Object.keys(room.players || {}).length >= 4) return false;
+  if (room.players?.[player.uid]) return true;
+  const maxPlayers = room.maxPlayers ?? 4;
+  if (Object.keys(room.players || {}).length >= maxPlayers) return false;
   await update(ref(rtdb, `rooms/${roomId}/players`), {
     [player.uid]: player,
   });
   return true;
+};
+
+export const quickMatch = async (
+  player: RoomPlayer,
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme
+): Promise<string> => {
+  const roomsRef = ref(rtdb, 'rooms');
+  const snap = await get(roomsRef);
+
+  if (snap.exists()) {
+    const rooms = snap.val() as Record<string, Omit<Room, 'id'>>;
+    const openRoomIds = Object.entries(rooms)
+      .filter(([, room]) => {
+        const playersCount = Object.keys(room.players || {}).length;
+        const maxPlayers = room.maxPlayers ?? 4;
+        return (
+          room.status === 'waiting' &&
+          room.gameType === gameType &&
+          room.difficulty === difficulty &&
+          room.theme === theme &&
+          room.isPrivate === false &&
+          playersCount < maxPlayers &&
+          !room.players?.[player.uid]
+        );
+      })
+      .sort(([, a], [, b]) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+      .map(([roomId]) => roomId);
+
+    for (const roomId of openRoomIds) {
+      const joined = await joinRoom(roomId, player);
+      if (joined) return roomId;
+    }
+  }
+
+  return createRoom(player, gameType, difficulty, theme, {
+    isPrivate: false,
+    maxPlayers: 2,
+  });
 };
 
 export const leaveRoom = async (roomId: string, uid: string) => {

@@ -15,6 +15,8 @@ export interface RoomPlayer {
 export interface Room {
   id: string;
   hostId: string;
+  isPrivate: boolean;
+  maxPlayers: number;
   status: RoomStatus;
   gameType: GameType;
   difficulty: Difficulty;
