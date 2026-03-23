@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Gamepad2,
   Palette,
   Users,
   Trophy,
@@ -21,7 +20,7 @@ const GAMES = [
     title: "Card Flip Match",
     icon: Layers,
     description:
-      "Find matching pairs in a polished concentration game. Single and multiplayer.",
+      "A refined concentration challenge supporting both solo and competitive play.",
     tags: ["Single Player", "Multiplayer"],
     gradient: "from-teal-500/25 to-cyan-600/10",
     glowColor: "rgba(0, 194, 168, 0.15)",
@@ -32,7 +31,7 @@ const GAMES = [
     title: "Number Sequence",
     icon: Hash,
     description:
-      "Memorize the flashing sequence and repeat it. Push your streak higher.",
+      "Test your sequential recall and progressively enhance your performance.",
     tags: ["Single Player"],
     gradient: "from-sky-500/25 to-blue-600/10",
     glowColor: "rgba(56, 189, 248, 0.15)",
@@ -42,7 +41,7 @@ const GAMES = [
     id: "pattern-memory",
     title: "Pattern Memory",
     icon: GridIcon,
-    description: "Study the grid pattern and recreate it. Levels scale fast.",
+    description: "Master spatial visualization through rapidly evolving grid challenges.",
     tags: ["Single Player"],
     gradient: "from-amber-500/30 to-orange-600/10",
     glowColor: "rgba(245, 165, 36, 0.15)",
@@ -53,7 +52,7 @@ const GAMES = [
     title: "Word Match",
     icon: WordIcon,
     description:
-      "Match word pairs hidden under cards. Great for vocabulary practice.",
+      "Enhance linguistic recall through structured card-based matching.",
     tags: ["Single Player", "Multiplayer"],
     gradient: "from-rose-500/25 to-pink-600/10",
     glowColor: "rgba(244, 63, 94, 0.15)",
@@ -61,31 +60,25 @@ const GAMES = [
   },
 ];
 
-const STATS = [
-  { icon: Gamepad2, label: "Games", value: "4" },
-  { icon: Palette, label: "Themes", value: "5+" },
-  { icon: Users, label: "Multiplayer", value: "Real-time" },
-  { icon: Trophy, label: "Leaderboard", value: "Global" },
-];
 
 const FEATURES = [
   {
     icon: Palette,
     tag: "THEMES",
-    title: "Multiple Themes",
-    desc: "Colors, emojis, numbers, animals, and symbols with fresh layouts every round.",
+    title: "Personalized Experience",
+    desc: "A variety of visual themes including minimalist colors and expressive iconography.",
   },
   {
     icon: Users,
     tag: "REALTIME",
-    title: "Live Multiplayer",
-    desc: "Create private rooms and compete with friends using instant real-time updates.",
+    title: "Synchronous Play",
+    desc: "Engage in real-time competition through private rooms and instant state synchronization.",
   },
   {
     icon: Trophy,
     tag: "RANKED",
-    title: "Global Leaderboard",
-    desc: "Track high scores and climb the rankings across every game and difficulty.",
+    title: "Performance Metrics",
+    desc: "Track and compare high scores across all game modes on a global scale.",
   },
 ];
 
@@ -179,22 +172,19 @@ export default function Home() {
               <div className="bento-glow-orb bento-glow-teal w-[500px] h-[500px] -top-32 -left-32 opacity-30 group-hover:opacity-50 transition-all duration-1000" />
 
               <div className="relative z-10">
-                <span className="badge mono text-xs mb-6 inline-flex bg-accent/10 border-accent/20 text-accent font-bold px-4 py-1.5 uppercase tracking-[0.2em]">
-                  Memory Lab v2.0
-                </span>
                 <h1 className="text-6xl sm:text-7xl lg:text-8xl font-black text-white mb-8 leading-[0.9] tracking-tighter">
-                  Train Your <br />
-                  <span className="bento-title-gradient">Memory</span>
+                  Challenge Your <br />
+                  <span className="bento-title-gradient">Cognitive Potential</span>
                 </h1>
                 <p className="text-xl text-slate-400 mb-10 max-w-lg leading-relaxed font-medium">
-                  A high-performance laboratory for cognitive training. Master focus through immersive minimalist games.
+                  A refined suite of cognitive challenges designed for mental clarity and focus. Experience precision-engineered games in a minimalist environment.
                 </p>
                 <div className="flex flex-wrap gap-4">
                   <Link
                     to="/lobby/card-flip"
                     className="btn btn-primary btn-primary-pulse px-10 py-5 rounded-2xl text-lg font-bold flex items-center gap-3 shadow-[0_0_40px_rgba(0,194,168,0.3)]"
                   >
-                    Start Training
+                    Get Started
                     <Zap className="w-5 h-5 fill-current" />
                   </Link>
                 </div>
@@ -252,35 +242,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ━━━ STATS BAR ━━━ */}
-      <section className="w-full max-w-5xl mx-auto px-6 sm:px-8 -mt-2 mb-10 sm:mb-16">
-        <motion.div
-          className="bento-card bento-noise relative overflow-hidden px-6 py-5 sm:px-10 sm:py-6"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.5 }}
-        >
-          {/* Subtle glow for the stats bar */}
-          <div className="absolute inset-0 bg-linear-to-r from-transparent via-highlight/5 to-transparent pointer-events-none" />
-          
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-4 relative z-10">
-            {STATS.map(({ icon: Icon, label, value }) => (
-              <div
-                key={label}
-                className="flex flex-col items-center text-center gap-1.5"
-              >
-                <Icon className="w-6 h-6 text-highlight mb-1 drop-shadow-[0_0_12px_rgba(0,194,168,0.4)]" />
-                <span className="text-xl sm:text-2xl font-bold text-white">
-                  {value}
-                </span>
-                <span className="text-xs text-text-muted mono uppercase tracking-wider font-semibold">
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      </section>
 
       {/* ━━━ GAMES BENTO GRID ━━━ */}
       <section className="w-full max-w-7xl mx-auto px-6 sm:px-8 py-12 sm:py-24">
@@ -291,11 +252,8 @@ export default function Home() {
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
-          <span className="badge mono text-xs mb-4 inline-block font-black tracking-[0.3em] text-highlight bg-highlight/5 border-highlight/20">
-            SYSTEM CORE
-          </span>
           <h2 className="text-4xl sm:text-6xl font-black text-white tracking-tighter relative z-10">
-            Available <span className="text-highlight drop-shadow-[0_0_20px_rgba(110,231,255,0.3)]">Protocols</span>
+            Explore Our <span className="text-highlight drop-shadow-[0_0_20px_rgba(110,231,255,0.3)]">Collection</span>
           </h2>
         </motion.div>
 
@@ -314,6 +272,17 @@ export default function Home() {
 
       {/* ━━━ FEATURES BENTO ━━━ */}
       <section className="w-full max-w-7xl mx-auto px-6 sm:px-8 py-12 sm:py-24">
+        <motion.div
+          className="text-center mb-16 relative"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+        >
+          <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tighter relative z-10">
+            Advanced <span className="text-accent drop-shadow-[0_0_20px_rgba(0,194,168,0.3)]">Capabilities</span>
+          </h2>
+        </motion.div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {FEATURES.map(({ icon: Icon, tag, title, desc }) => (
             <motion.div 
@@ -360,16 +329,16 @@ export default function Home() {
             </div>
             
             <h2 className="text-4xl sm:text-7xl font-black text-white mb-8 tracking-tighter max-w-2xl leading-[0.9]">
-              Elevate Your <span className="gradient-text">Cognitive</span> Baseline.
+              Experience the <span className="gradient-text">Collection</span>.
             </h2>
             <p className="text-slate-300 text-lg sm:text-2xl mb-12 max-w-2xl mx-auto leading-relaxed font-medium opacity-80">
-              Start your journey today. No signup, no friction. Just peak performance.
+              Begin your experience immediately. No registration required.
             </p>
             <Link
               to="/lobby/card-flip"
               className="btn btn-primary btn-primary-pulse px-16 py-6 rounded-2xl text-xl font-black inline-flex items-center gap-4 shadow-[0_20px_50px_rgba(0,194,168,0.4)] hover:shadow-[0_20px_70px_rgba(0,194,168,0.6)] transition-all"
             >
-              Initialize Training
+              Start Now
               <ArrowRight className="w-7 h-7 transition-transform group-hover:translate-x-3" />
             </Link>
           </div>
