@@ -1,14 +1,14 @@
 import { useState, useCallback, type CSSProperties } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import Card from "../../components/game/Card";
-import GameStats from "../../components/game/GameStats";
-import WinModal from "../../components/game/WinModal";
-import { useCardFlip } from "../../hooks/useCardFlip";
-import { useAuth } from "../../hooks/useAuth";
-import { saveGameResult } from "../../firebase/firestore";
-import type { Difficulty, CardTheme } from "../../types/game.types";
-import { getGridCols } from "../../utils/cardUtils";
+import Card from "../components/game/Card.tsx";
+import GameStats from "../components/game/GameStats.tsx";
+import WinModal from "../components/game/WinModal.tsx";
+import { useCardFlip } from "../hooks/useCardFlip.ts";
+import { useAuth } from "../hooks/useAuth.ts";
+import { saveGameResult } from "../firebase/firestore.ts";
+import type { Difficulty, CardTheme } from "../types/game.types.ts";
+import { getGridCols } from "../utils/cardUtils.ts";
 import { ChevronLeft, RotateCcw } from "lucide-react";
 
 const VALID_DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
@@ -20,7 +20,7 @@ const gridColsMap: Record<number, string> = {
   8: "grid-cols-8",
 };
 
-export default function CardFlipGame() {
+export default function CardFlipPage() {
   const { user } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();

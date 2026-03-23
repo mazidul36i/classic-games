@@ -7,7 +7,7 @@ import Register from '../pages/Register';
 import Profile from '../pages/Profile';
 import Leaderboard from '../pages/Leaderboard';
 import GameLobby from '../pages/GameLobby';
-import CardFlipGame from '../games/card-flip/CardFlipGame';
+import CardFlipPage from '../pages/CardFlipPage.tsx';
 import NumberSequencePage from '../pages/NumberSequencePage';
 import PatternMemoryPage from '../pages/PatternMemoryPage';
 import WordMatchPage from '../pages/WordMatchPage';
@@ -37,7 +37,7 @@ export default function AppRoutes() {
             }
           />
           <Route path="/lobby" element={<GameLobby />} />
-          <Route path="/play/card-flip" element={<CardFlipGame />} />
+          <Route path="/play/card-flip" element={<CardFlipPage />} />
           <Route path="/play/number-sequence" element={<NumberSequencePage />} />
           <Route path="/play/pattern-memory" element={<PatternMemoryPage />} />
           <Route path="/play/word-match" element={<WordMatchPage />} />
