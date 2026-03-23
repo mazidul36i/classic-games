@@ -20,7 +20,7 @@ export const useAuthInit = () => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [reset, setLoading, setProfile, setUser]);
 };
 
 export const useAuth = () => {

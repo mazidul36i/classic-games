@@ -45,7 +45,10 @@ export const useCardFlip = ({ difficulty, theme, onComplete }: UseCardFlipOption
   }, [difficulty, theme]);
 
   useEffect(() => {
-    initGame();
+    const timeoutId = setTimeout(() => {
+      initGame();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [initGame]);
 
   const flipCard = useCallback(

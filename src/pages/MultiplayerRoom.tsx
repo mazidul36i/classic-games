@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { type CSSProperties } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
@@ -16,13 +16,7 @@ export default function MultiplayerRoom() {
   const { room, loading, myPlayer, isMyTurn, players, handleFlipCard, handleReady, handleLeave } =
     useMultiplayer(roomId ?? null, user?.uid ?? null);
 
-  const [showResult, setShowResult] = useState(false);
-
-  useEffect(() => {
-    if (room?.status === "finished") {
-      setShowResult(true);
-    }
-  }, [room?.status]);
+  const showResult = room?.status === "finished";
 
   const handleStart = async () => {
     if (!room || !roomId) return;

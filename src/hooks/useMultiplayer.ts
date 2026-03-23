@@ -12,18 +12,14 @@ import type { CardItem } from "../types/game.types";
 
 export const useMultiplayer = (roomId: string | null, currentUid: string | null) => {
   const [room, setRoom] = useState<Room | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadedRoomId, setLoadedRoomId] = useState<string | null>(null);
   const unsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!roomId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+    if (!roomId) return;
     const unsub = subscribeToRoom(roomId, (r) => {
       setRoom(r);
-      setLoading(false);
+      setLoadedRoomId(roomId);
     });
     unsubRef.current = unsub;
     return () => {
@@ -31,9 +27,12 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     };
   }, [roomId]);
 
+  const loading = Boolean(roomId) && loadedRoomId !== roomId;
+  const activeRoom = loadedRoomId === roomId ? room : null;
+
   const handleFlipCard = async (cardId: string) => {
-    if (!roomId || !room || !currentUid) return;
-    const gs = room.gameState;
+    if (!roomId || !activeRoom || !currentUid) return;
+    const gs = activeRoom.gameState;
     console.log("game state", gs);
     if (!gs) return;
     if (gs.currentTurn !== currentUid) return;
@@ -63,7 +62,7 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
         });
 
         // Determine next turn
-        const playerUids = Object.keys(room.players);
+        const playerUids = Object.keys(activeRoom.players);
         const currentIdx = playerUids.indexOf(currentUid);
         const nextUid = playerUids[(currentIdx + 1) % playerUids.length];
 
@@ -97,15 +96,15 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
   };
 
   const myPlayer: RoomPlayer | null =
-    room && currentUid ? room.players?.[currentUid] ?? null : null;
+    activeRoom && currentUid ? activeRoom.players?.[currentUid] ?? null : null;
 
   const isMyTurn =
-    room?.gameState?.currentTurn === currentUid;
+    activeRoom?.gameState?.currentTurn === currentUid;
 
-  const players = room ? Object.values(room.players ?? {}) : [];
+  const players = activeRoom ? Object.values(activeRoom.players ?? {}) : [];
 
   return {
-    room,
+    room: activeRoom,
     loading,
     myPlayer,
     isMyTurn,
