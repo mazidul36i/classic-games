@@ -78,7 +78,7 @@ export default function CardFlipPage() {
   };
 
   return (
-    <div className="flex flex-col items-center gap-6 py-6 px-4">
+    <div className="max-w-lg mx-auto px-4 py-10 flex flex-col items-center gap-6">
       {/* Header */}
       <div className="flex items-center justify-between w-full max-w-3xl">
         <button
@@ -101,15 +101,31 @@ export default function CardFlipPage() {
 
       {/* Game Board */}
       <motion.div
-        className={`grid w-fit mx-auto ${colClass} gap-2 sm:gap-3 place-items-center`}
-        style={boardStyle}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        className="relative rounded-3xl border border-white/12 bg-[linear-gradient(155deg,rgba(28,27,55,0.88),rgba(15,23,42,0.9)_45%,rgba(12,74,110,0.78))] px-3 py-3 sm:px-4 sm:py-4 shadow-[0_24px_64px_rgba(2,8,23,0.58)]"
+        initial={{ opacity: 0, y: 24, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.4 }}
       >
-        {cards.map((card) => (
-          <Card key={card.id} card={card} onClick={flipCard} size={cardSize} disabled={isLocked || isComplete} />
-        ))}
+        <div className="pointer-events-none absolute inset-0 rounded-3xl bg-[radial-gradient(circle_at_18%_14%,rgba(244,114,182,0.18),transparent_44%),radial-gradient(circle_at_84%_88%,rgba(45,212,191,0.16),transparent_48%)]" />
+        <div className="pointer-events-none absolute inset-[1px] rounded-[calc(1.5rem-1px)] border border-white/10" />
+        <motion.div
+          className={`relative z-10 grid w-fit mx-auto ${colClass} gap-2 sm:gap-3 place-items-center`}
+          style={boardStyle}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.35, delay: 0.08 }}
+        >
+          {cards.map((card, index) => (
+            <motion.div
+              key={card.id}
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.2, delay: Math.min(index * 0.012, 0.28) }}
+            >
+              <Card card={card} onClick={flipCard} size={cardSize} disabled={isLocked || isComplete} />
+            </motion.div>
+          ))}
+        </motion.div>
       </motion.div>
 
       <WinModal
