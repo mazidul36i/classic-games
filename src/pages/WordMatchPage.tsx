@@ -1,20 +1,21 @@
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { useAuth } from '../hooks/useAuth';
-import { saveGameResult } from '../firebase/firestore';
-import GameStats from '../components/game/GameStats';
-import WinModal from '../components/game/WinModal';
-import type { Difficulty } from '../types/game.types';
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { useState, useCallback } from "react";
+import { motion } from "framer-motion";
+import { useAuth } from "../hooks/useAuth";
+import { saveGameResult } from "../firebase/firestore";
+import GameStats from "../components/game/GameStats";
+import WinModal from "../components/game/WinModal";
+import type { Difficulty } from "../types/game.types";
+import { ChevronLeft, RotateCcw } from "lucide-react";
 
 // Word pairs for matching (word → related word / synonym / antonym)
 const WORD_PAIRS: [string, string][] = [
-  ['Happy', 'Joyful'], ['Cold', 'Frigid'], ['Big', 'Large'],
-  ['Fast', 'Quick'], ['Smart', 'Clever'], ['Brave', 'Bold'],
-  ['Calm', 'Peaceful'], ['Dark', 'Dim'], ['Hot', 'Warm'],
-  ['Small', 'Tiny'], ['Old', 'Ancient'], ['New', 'Fresh'],
-  ['Kind', 'Gentle'], ['Loud', 'Noisy'], ['Strong', 'Powerful'],
-  ['Rich', 'Wealthy'], ['Poor', 'Needy'], ['Love', 'Adore'],
+  ["Happy", "Joyful"], ["Cold", "Frigid"], ["Big", "Large"],
+  ["Fast", "Quick"], ["Smart", "Clever"], ["Brave", "Bold"],
+  ["Calm", "Peaceful"], ["Dark", "Dim"], ["Hot", "Warm"],
+  ["Small", "Tiny"], ["Old", "Ancient"], ["New", "Fresh"],
+  ["Kind", "Gentle"], ["Loud", "Noisy"], ["Strong", "Powerful"],
+  ["Rich", "Wealthy"], ["Poor", "Needy"], ["Love", "Adore"],
 ];
 
 interface WordCard {
@@ -25,7 +26,7 @@ interface WordCard {
   isMatched: boolean;
 }
 
-const shuffle = <T,>(arr: T[]): T[] => {
+const shuffle = <T, >(arr: T[]): T[] => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -35,12 +36,12 @@ const shuffle = <T,>(arr: T[]): T[] => {
 };
 
 const generateWordCards = (difficulty: Difficulty): WordCard[] => {
-  const count = difficulty === '4x4' ? 8 : difficulty === '6x6' ? 18 : 18;
+  const count = difficulty === "4x4" ? 8 : difficulty === "6x6" ? 18 : 18;
   const pairs = WORD_PAIRS.slice(0, count);
   const cards: WordCard[] = [];
   pairs.forEach(([a, b], i) => {
-    cards.push({ id: `${i}-a`, pairId: `${i}`, word: a, isFlipped: false, isMatched: false });
-    cards.push({ id: `${i}-b`, pairId: `${i}`, word: b, isFlipped: false, isMatched: false });
+    cards.push({ id: `${ i }-a`, pairId: `${ i }`, word: a, isFlipped: false, isMatched: false });
+    cards.push({ id: `${ i }-b`, pairId: `${ i }`, word: b, isFlipped: false, isMatched: false });
   });
   return shuffle(cards);
 };
@@ -50,8 +51,8 @@ export default function WordMatchPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const rawDifficulty = params.get('difficulty') as Difficulty;
-  const difficulty: Difficulty = ['4x4', '6x6', '8x8'].includes(rawDifficulty) ? rawDifficulty : '4x4';
+  const rawDifficulty = params.get("difficulty") as Difficulty;
+  const difficulty: Difficulty = ["4x4", "6x6", "8x8"].includes(rawDifficulty) ? rawDifficulty : "4x4";
 
   const [cards, setCards] = useState<WordCard[]>(() => generateWordCards(difficulty));
   const [flippedIds, setFlippedIds] = useState<string[]>([]);
@@ -99,9 +100,9 @@ export default function WordMatchPage() {
               if (user) {
                 saveGameResult({
                   uid: user.uid,
-                  displayName: user.displayName || 'Player',
-                  gameType: 'word-match',
-                  mode: 'single',
+                  displayName: user.displayName || "Player",
+                  gameType: "word-match",
+                  mode: "single",
                   difficulty,
                   score,
                   moves: moves + 1,
@@ -138,53 +139,62 @@ export default function WordMatchPage() {
     setFinalScore(0);
   };
 
-  const cols = difficulty === '4x4' ? 'grid-cols-4' : 'grid-cols-6';
+  const cols = difficulty === "4x4" ? "grid-cols-4" : "grid-cols-6";
+  const cellSizeClass =
+    difficulty === "4x4" ? "w-16 h-16 sm:w-20 sm:h-20" : "w-12 h-16 sm:w-14 sm:h-20";
 
   return (
-    <div className="flex flex-col items-center gap-6 py-6 px-4">
+    <div className="max-w-lg mx-auto px-4 py-10 flex flex-col items-center gap-6">
       <div className="flex items-center justify-between w-full max-w-3xl">
-        <button onClick={() => navigate('/lobby')} className="text-slate-400 hover:text-white transition-colors">
-          ← Back
+        <button
+          onClick={ () => navigate(-1) }
+          className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
+        >
+          <ChevronLeft className="text-xl font-bold text-white mr-1" />
         </button>
-        <h1 className="text-xl font-bold text-white">🔤 Word Match</h1>
-        <button onClick={restart} className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg">
-          Restart
+        <h1 className="text-xl font-bold text-white">Word Match</h1>
+        <button
+          onClick={ restart }
+          className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
+        >
+          <RotateCcw className="text-xl font-bold text-white" />
         </button>
       </div>
 
-      <GameStats moves={moves} time={time} matched={matchedPairs} total={totalPairs} />
+      <GameStats moves={ moves } time={ time } matched={ matchedPairs } total={ totalPairs } />
 
       <motion.div
-        className={`grid ${cols} gap-2`}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        className={ `grid ${ cols } gap-2` }
+        initial={ { opacity: 0, y: 20 } }
+        animate={ { opacity: 1, y: 0 } }
       >
-        {cards.map((card) => (
+        { cards.map((card) => (
           <motion.button
-            key={card.id}
-            onClick={() => handleFlip(card.id)}
-            disabled={isLocked || isComplete || card.isFlipped || card.isMatched}
-            className={`h-16 sm:h-20 px-2 rounded-xl border-2 text-sm font-semibold transition-all ${
+            key={ card.id }
+            onClick={ () => handleFlip(card.id) }
+            disabled={ isLocked || isComplete || card.isFlipped || card.isMatched }
+            className={ `${ cellSizeClass } px-2 rounded-xl border-2 text-sm font-semibold transition-all ${
               card.isMatched
-                ? 'bg-emerald-900/60 border-emerald-500 text-emerald-300'
+                ? "bg-emerald-900/60 border-emerald-500 text-emerald-300"
                 : card.isFlipped
-                ? 'bg-indigo-900/60 border-indigo-400 text-white'
-                : 'bg-slate-800 border-slate-600 text-transparent hover:border-slate-500 cursor-pointer'
-            }`}
-            whileTap={{ scale: 0.95 }}
+                  ? "bg-indigo-900/60 border-indigo-400 text-white"
+                  : "bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-500 cursor-pointer"
+            }` }
+            whileTap={ { scale: 0.95 } }
           >
-            {(card.isFlipped || card.isMatched) ? card.word : '?'}
+            { (card.isFlipped || card.isMatched) ? card.word : "?" }
           </motion.button>
-        ))}
+        )) }
       </motion.div>
 
       <WinModal
-        isOpen={showModal}
-        moves={moves}
-        time={time}
-        score={finalScore}
-        onPlayAgain={restart}
+        isOpen={ showModal }
+        moves={ moves }
+        time={ time }
+        score={ finalScore }
+        onPlayAgain={ restart }
       />
     </div>
   );
 }
+
