@@ -26,44 +26,44 @@ export default function Navbar() {
           </Link>
 
           <div className="hidden md:flex items-center gap-6">
-            { [
+            {[
               { to: "/", label: "Home" },
-              { to: "/lobby", label: "Play" },
+              { to: "/lobby/card-flip", label: "Play" },
               { to: "/leaderboard", label: "Leaderboard" },
             ].map((item) => (
               <Link
-                key={ item.to }
-                to={ item.to }
+                key={item.to}
+                to={item.to}
                 className="text-sm font-medium text-text-muted hover:text-white transition-colors"
               >
-                { item.label }
+                {item.label}
               </Link>
-            )) }
+            ))}
           </div>
 
           <div className="flex items-center gap-3">
-            { isAuthenticated ? (
+            {isAuthenticated ? (
               <>
                 <Link to="/profile" className="flex items-center gap-2 group">
-                  { user?.photoURL ? (
+                  {user?.photoURL ? (
                     <img
-                      src={ user.photoURL }
+                      src={user.photoURL}
                       alt="avatar"
                       className="w-8 h-8 rounded-full border border-accent"
                     />
                   ) : (
                     <div
                       className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-[#072225] text-sm font-bold">
-                      { (user?.displayName || user?.email || "P")[0].toUpperCase() }
+                      {(user?.displayName || user?.email || "P")[0].toUpperCase()}
                     </div>
-                  ) }
+                  )}
                   <span
                     className="text-sm text-text-muted group-hover:text-white transition-colors hidden md:block">
-                    { user?.displayName || "Player" }
+                    {user?.displayName || "Player"}
                   </span>
                 </Link>
                 <button
-                  onClick={ handleLogout }
+                  onClick={handleLogout}
                   className="btn btn-ghost px-3 py-1.5 text-sm"
                 >
                   Logout
@@ -84,7 +84,7 @@ export default function Navbar() {
                   Sign Up
                 </Link>
               </>
-            ) }
+            )}
           </div>
         </div>
       </div>

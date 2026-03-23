@@ -36,7 +36,8 @@ export default function AppRoutes() {
               </ProtectedRoute>
             }
           />
-          <Route path="/lobby" element={<GameLobby />} />
+          <Route path="/lobby" element={<Navigate to="/lobby/card-flip" replace />} />
+          <Route path="/lobby/:gameType" element={<GameLobby />} />
           <Route path="/play/card-flip" element={<CardFlipPage />} />
           <Route path="/play/number-sequence" element={<NumberSequencePage />} />
           <Route path="/play/pattern-memory" element={<PatternMemoryPage />} />

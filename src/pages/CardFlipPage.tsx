@@ -82,7 +82,7 @@ export default function CardFlipPage() {
       {/* Header */}
       <div className="flex items-center justify-between w-full max-w-3xl">
         <button
-          onClick={() => navigate("/lobby")}
+          onClick={() => navigate(-1)}
           className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
         >
           <ChevronLeft className="text-xl font-bold text-white mr-1" />
