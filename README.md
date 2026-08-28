@@ -1,225 +1,162 @@
-# 🧠 MemoryGames
+# The Memory Parlour
 
-A modern, full-featured **memory games platform** built with React, TypeScript, Firebase, and Tailwind CSS. Play classic memory games solo or challenge friends in real-time multiplayer.
+A memory-games platform built with React, TypeScript and Firebase. Four games of
+recollection, played alone or across the table — with real-time multiplayer rooms,
+a global leaderboard and per-player stats.
 
----
+**Live:** [classicplay.web.app](https://classicplay.web.app)
 
-## 🎮 Games
+## Games
 
-| Game | Mode | Description |
-|------|------|-------------|
-| 🃏 **Card Flip Match** | Single + Multiplayer | Classic concentration — flip cards to find matching pairs by color, emoji, number, animal, or symbol |
-| 🔢 **Number Sequence** | Single Player | Watch a growing number sequence flash on screen and repeat it from memory |
-| 🔲 **Pattern Memory** | Single Player | Memorize a highlighted grid pattern and recreate it — levels get harder each round |
-| 🔤 **Word Match** | Single + Multiplayer | Match synonym/related word pairs hidden under cards |
+| Game | Modes | Difficulty | Rules |
+|------|-------|-----------|-------|
+| **Card Flip Match** | Solo · Multiplayer | 4×4, 6×6, 8×8 | Concentration. Flip two cards a turn and keep the pairs that match. |
+| **Word Match** | Solo · Multiplayer | 4×4, 6×6 | The same board, but pairs are related words rather than symbols. |
+| **Number Sequence** | Solo | — | A sequence flashes across a 3×3 pad and grows by one each level. Repeat it back. Three lives. |
+| **Pattern Memory** | Solo | 4×4 grid | Cells light up, then go dark. Recreate the pattern. Three lives, one returned per level cleared. |
 
----
+Card Flip and Word Match can be dealt with five decks: **colours, emojis, numbers,
+animals** and **symbols**.
 
-## ✨ Features
+## Features
 
-- **3D Card Flip Animations** — smooth CSS perspective + Framer Motion transitions
-- **Multiple Card Themes** — Colors, Emojis, Numbers, Animals, Symbols
-- **3 Difficulty Levels** — 4×4 (8 pairs), 6×6 (18 pairs), 8×8 (32 pairs)
-- **Real-time Multiplayer** — create or join rooms with a 6-character code, up to 4 players
-- **Turn-based Multiplayer** — synchronized board via Firebase Realtime Database; match a pair = extra turn
-- **Firebase Auth** — Email/Password and Google Sign-In
-- **Global Leaderboard** — per-game, filterable by difficulty
-- **Player Profile** — stats dashboard, win rate, best scores, game history
-- **Responsive Design** — mobile-first, works on all screen sizes
-- **Dark Theme** — deep slate + indigo color palette
+- **Real-time multiplayer** — create a room with a 6-character code, join one, or
+  take a quick match into the first open table. Up to 4 players, turn-based over
+  Firebase Realtime Database; matching a pair earns another turn.
+- **Firebase Auth** — email/password and Google sign-in. Playing requires an account;
+  the front page, lobby and leaderboard are open to anyone.
+- **Global leaderboard** — per game, filterable by difficulty.
+- **Player profile** — games played, win rate, best score per game, and recent history.
+- **The Memory Parlour theme** — a letterpress/broadsheet design system built on
+  Tailwind v4 tokens, with reduced-motion support throughout.
+- **Responsive** — one layout from phone to desktop.
 
----
+## Tech stack
 
-## 🏗️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19 + TypeScript |
-| Build Tool | Vite 7 |
-| Styling | Tailwind CSS v4 |
-| Animations | Framer Motion |
+| Layer | Choice |
+|-------|--------|
+| UI | React 19 · TypeScript |
+| Build | Vite 7 |
+| Styling | Tailwind CSS v4 (`@theme` tokens in `src/index.css`) |
+| Animation | Framer Motion |
 | Routing | React Router v7 |
-| State Management | Zustand |
-| Authentication | Firebase Auth (Email + Google) |
-| Database | Firebase Firestore (profiles, history, leaderboard) |
-| Realtime | Firebase Realtime Database (multiplayer rooms) |
+| State | Zustand |
+| Auth | Firebase Auth (email + Google) |
+| Data | Firestore — profiles, history, leaderboard |
+| Realtime | Firebase Realtime Database — multiplayer rooms |
+| Hosting | Firebase Hosting, deployed by GitHub Actions |
 
----
+## Getting started
 
-## 📁 Project Structure
+### Prerequisites
+
+- Node 20.19+ (Vite 7)
+- A Firebase project with **Authentication** (Email/Password + Google),
+  **Firestore** and **Realtime Database** enabled
+
+### Install and run
+
+```bash
+git clone https://github.com/mazidul36i/classic-games.git
+cd classic-games
+npm install
+cp .env.example .env    # then fill in the values below
+npm run dev
+```
+
+The app runs at http://localhost:5173.
+
+### Environment
+
+```env
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_DATABASE_URL=https://your_project-default-rtdb.firebaseio.com
+```
+
+## Project structure
 
 ```
 src/
 ├── components/
-│   ├── game/          # Card, GameStats, WinModal
-│   └── layout/        # Navbar, Layout
-├── firebase/
-│   ├── config.ts      # Firebase initialization
-│   ├── auth.ts        # Auth helpers
-│   ├── firestore.ts   # Firestore CRUD
-│   └── realtime.ts    # Realtime DB (multiplayer)
-├── games/
-│   └── card-flip/     # CardFlipGame component
-├── hooks/
-│   ├── useAuth.ts     # Auth state hook
-│   ├── useCardFlip.ts # Card flip game logic
-│   └── useMultiplayer.ts # Multiplayer sync hook
-├── pages/
-│   ├── Home.tsx
-│   ├── Login.tsx / Register.tsx
-│   ├── GameLobby.tsx
-│   ├── CardFlipPage.tsx
-│   ├── NumberSequencePage.tsx
-│   ├── PatternMemoryPage.tsx
-│   ├── WordMatchPage.tsx
-│   ├── MultiplayerRoom.tsx
-│   ├── Leaderboard.tsx
-│   └── Profile.tsx
-├── routes/
-│   └── AppRoutes.tsx  # All routes + protected routes
-├── store/
-│   ├── authStore.ts   # Zustand auth store
-│   └── gameStore.ts   # Zustand game store
-├── types/
-│   ├── game.types.ts
-│   ├── user.types.ts
-│   └── multiplayer.types.ts
-└── utils/
-    └── cardUtils.ts   # Card generation, scoring
+│   ├── game/      Card, GameStats, GameHead, WinModal
+│   └── layout/    Layout, Navbar, PageHead
+├── firebase/      config, auth, firestore, realtime
+├── hooks/         useAuth, useCardFlip, useMultiplayer
+├── pages/         Home, Login, Register, GameLobby, the four games,
+│                  MultiplayerRoom, Leaderboard, Profile
+├── routes/        AppRoutes — routing and the auth guard
+├── store/         authStore, gameStore (Zustand)
+├── types/         game, user and multiplayer types
+├── utils/         cardUtils — deck generation and scoring
+└── index.css      design tokens and the Parlour component set
 ```
 
----
+Games live at the page level and own their own state; only Card Flip splits its
+logic into a hook (`useCardFlip`), which `useMultiplayer` mirrors over the
+Realtime Database.
 
-## 🚀 Getting Started
+## Data model
 
-### 1. Clone & Install
-
-```bash
-git clone <your-repo-url>
-cd memory-games
-npm install
-```
-
-### 2. Configure Firebase
-
-Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com) and enable:
-- **Authentication** → Email/Password + Google providers
-- **Firestore Database** → Start in test mode
-- **Realtime Database** → Start in test mode
-
-Copy the environment file and fill in your credentials:
-
-```bash
-cp .env.example .env
-```
-
-```env
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-VITE_FIREBASE_DATABASE_URL=https://your_project-default-rtdb.firebaseio.com
-```
-
-### 3. Run Development Server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:5173](http://localhost:5173) in your browser.
-
-### 4. Build for Production
-
-```bash
-npm run build
-npm run preview
-```
-
----
-
-## 🔥 Firebase Data Structure
-
-### Firestore
+**Firestore**
 
 ```
-users/{uid}
-  displayName, email, photoURL, createdAt
-  totalGamesPlayed, totalWins
-  highScores: { "card-flip": 750, "word-match": 420, ... }
-
-gameHistory/{docId}
-  uid, displayName, gameType, mode, difficulty
-  score, moves, timeSeconds, completedAt, isWin
-
+users/{uid}                displayName, email, photoURL, createdAt,
+                           totalGamesPlayed, totalWins, highScores{gameType: score}
+gameHistory/{docId}        uid, displayName, gameType, mode, difficulty,
+                           score, moves, timeSeconds, completedAt, isWin
 leaderboard/{gameType}/scores/{docId}
-  uid, displayName, score, moves, timeSeconds, difficulty, completedAt
+                           uid, displayName, score, moves, timeSeconds,
+                           difficulty, completedAt
 ```
 
-### Realtime Database (Multiplayer)
+**Realtime Database**
 
 ```
 rooms/{roomId}
-  hostId, status (waiting | playing | finished)
-  gameType, difficulty, theme
-  createdAt, startedAt, finishedAt
-  players/{uid}
-    displayName, photoURL, score, isReady, isCurrentTurn, joinedAt
-  gameState/
-    cards[]         → full card array with flip/match state
-    currentTurn     → uid of player whose turn it is
-    flippedCards[]  → card ids flipped this turn
-    matchedPairs    → count of matched pairs
-    totalPairs      → total pairs in game
-    turnStartedAt   → timestamp
+  hostId, status (waiting | playing | finished), isPrivate, maxPlayers
+  gameType, difficulty, theme, createdAt, startedAt, finishedAt
+  players/{uid}    displayName, photoURL, score, isReady, isCurrentTurn, joinedAt
+  gameState        cards[], currentTurn, flippedCards[], matchedPairs,
+                   totalPairs, turnStartedAt
 ```
 
----
+Both databases are currently open in test mode — write security rules before
+running this anywhere public.
 
-## 🎯 Scoring
+## Scoring
 
-Scores are calculated based on difficulty, moves, and time:
+Card games score on pairs, moves and time:
 
 ```
-Score = (pairs × 100) - (moves × 2) - (time_seconds × 0.5)
-Minimum score: 10 points
+Card Flip   score = pairs × 100 − moves × 2 − seconds × 0.5   (min 10)
+Word Match  score = pairs × 100 − moves × 3                   (min 10)
 ```
 
-In multiplayer, each matched pair = **1 point**. The player with the most points when all pairs are found wins.
+The level-based games accumulate as you go: **+10 × level** per sequence cleared,
+**+15 × level** per pattern. In multiplayer, each matched pair is one point and
+the highest score when the board is cleared takes the table.
 
----
-
-## 🛣️ Routes
-
-| Path | Page | Auth Required |
-|------|------|:---:|
-| `/` | Home | No |
-| `/login` | Login | No |
-| `/register` | Register | No |
-| `/lobby` | Game Lobby | No |
-| `/play/card-flip` | Card Flip Game | No |
-| `/play/number-sequence` | Number Sequence | No |
-| `/play/pattern-memory` | Pattern Memory | No |
-| `/play/word-match` | Word Match | No |
-| `/room/:roomId` | Multiplayer Room | ✅ Yes |
-| `/leaderboard` | Leaderboard | No |
-| `/profile` | Player Profile | ✅ Yes |
-
----
-
-## 📜 Scripts
+## Scripts
 
 ```bash
-npm run dev      # Start development server
-npm run build    # TypeScript check + production build
-npm run preview  # Preview production build locally
-npm run lint     # Run ESLint
+npm run dev      # development server
+npm run build    # tsc -b, then a production build to dist/
+npm run preview  # serve the production build
+npm run lint     # ESLint
 ```
 
----
+## Deployment
 
-## 📄 License
+Pushing to `main` builds and deploys to Firebase Hosting via
+`.github/workflows/firebase-hosting-merge.yml`; pull requests get a preview
+channel. Firebase credentials come from repository secrets and variables, so no
+`.env` is committed.
 
-MIT — feel free to use, modify, and distribute.
+## License
+
+MIT
