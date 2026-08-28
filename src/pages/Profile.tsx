@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, LogOut } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { logout } from "../firebase/auth";
+import { useAuthStore } from "../store/authStore";
 import { getUserGameHistory } from "../firebase/firestore";
 import type { GameResult } from "../types/game.types";
 
@@ -27,9 +29,17 @@ const formatTime = (secs: number) => {
 
 export default function Profile() {
   const { user, profile } = useAuth();
+  const { reset } = useAuthStore();
+  const navigate = useNavigate();
   const reduce = useReducedMotion();
   const [history, setHistory] = useState<GameResult[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleLogout = async () => {
+    await logout();
+    reset();
+    navigate("/");
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -73,7 +83,8 @@ export default function Profile() {
             <span className="hidden sm:inline">The Memory Parlour</span>
             <span className="text-vermilion mx-2 hidden sm:inline">✦</span>
             Member's Record
-          </span>
+          </span>
+
         </div>
 
         {/* ── Nameplate ── */}
@@ -81,13 +92,17 @@ export default function Profile() {
           <span className="p-avatar w-24 h-24 text-[2.2rem] ring-1 ring-ink-deep/40 ring-offset-4 ring-offset-paper">
             {user.photoURL ? <img src={user.photoURL} alt="" /> : profile.displayName[0]?.toUpperCase()}
           </span>
-          <div>
+          <div className="sm:flex-1">
             <span className="p-tick text-vermilion">Seated since {new Date(profile.createdAt).toLocaleDateString()}</span>
             <h1 className="p-display text-[clamp(2rem,5vw,3.2rem)] mt-3 leading-[1.05]">
               {profile.displayName}
             </h1>
             <p className="p-tick p-tick-plain text-ink-soft mt-3">{profile.email}</p>
           </div>
+          <button onClick={handleLogout} className="p-btn p-btn-sm p-btn-outline self-start sm:self-end">
+            <LogOut className="w-3.5 h-3.5" />
+            Leave the table
+          </button>
         </div>
       </motion.div>
 

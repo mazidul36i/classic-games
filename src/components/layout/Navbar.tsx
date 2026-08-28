@@ -1,7 +1,5 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
-import { logout } from "../../firebase/auth";
-import { useAuthStore } from "../../store/authStore";
 
 const LINKS = [
   { to: "/", label: "Front Page", match: (p: string) => p === "/" },
@@ -11,15 +9,7 @@ const LINKS = [
 
 export default function Navbar() {
   const { user, isAuthenticated } = useAuth();
-  const { reset } = useAuthStore();
-  const navigate = useNavigate();
   const { pathname } = useLocation();
-
-  const handleLogout = async () => {
-    await logout();
-    reset();
-    navigate("/");
-  };
 
   return (
     <nav className="p-nav">
@@ -47,32 +37,23 @@ export default function Navbar() {
 
           <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             {isAuthenticated ? (
-              <>
-                <Link to="/profile" className="flex items-center gap-2.5 group">
-                  <span className="p-avatar w-9 h-9 text-sm">
-                    {user?.photoURL ? (
-                      <img src={user.photoURL} alt="" />
-                    ) : (
-                      (user?.displayName || user?.email || "P")[0].toUpperCase()
-                    )}
-                  </span>
-                  <span className="p-tick text-ink-soft group-hover:text-ink-deep transition-colors hidden lg:block">
-                    {user?.displayName || "Player"}
-                  </span>
-                </Link>
-                <button onClick={handleLogout} className="p-btn p-btn-sm p-btn-outline">
-                  Leave
-                </button>
-              </>
+              /* Everything account-related — including leaving — lives on the profile page. */
+              <Link to="/profile" className="flex items-center gap-2.5 group">
+                <span className="p-avatar w-9 h-9 text-sm">
+                  {user?.photoURL ? (
+                    <img src={user.photoURL} alt="" />
+                  ) : (
+                    (user?.displayName || user?.email || "P")[0].toUpperCase()
+                  )}
+                </span>
+                <span className="p-tick text-ink-soft group-hover:text-ink-deep transition-colors hidden lg:block">
+                  {user?.displayName || "Player"}
+                </span>
+              </Link>
             ) : (
-              <>
-                <Link to="/login" className="p-navlink hidden sm:inline-flex">
-                  Sign in
-                </Link>
-                <Link to="/register" className="p-btn p-btn-sm p-btn-solid">
-                  Join the house
-                </Link>
-              </>
+              <Link to="/login" className="p-btn p-btn-sm p-btn-solid">
+                Sign in
+              </Link>
             )}
           </div>
         </div>
@@ -87,17 +68,6 @@ export default function Navbar() {
               {item.label}
             </Link>
           ))}
-          {/* The inline "Sign in" is hidden on narrow screens, so it joins the strip */}
-          {!isAuthenticated && (
-            <Link
-              to="/login"
-              className={`p-navlink whitespace-nowrap sm:hidden ${
-                pathname === "/login" ? "p-navlink-on" : ""
-              }`}
-            >
-              Sign in
-            </Link>
-          )}
         </div>
       </div>
     </nav>
