@@ -1,5 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..800&family=Archivo:ital,wght@0,300..700;1,400..600&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Spicy+Rice&family=Aladin&family=Flavors&family=Public+Sans:ital,wght@0,300..700;1,400..600&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -17,6 +17,7 @@
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* ── The Memory Parlour (paper/letterpress theme) ── */
+  --breakpoint-xs: 26rem;
   --color-paper: #f2ece1;
   --color-paper-2: #e7ddcb;
   --color-parchment: #fbf8f2;
@@ -25,8 +26,10 @@
   --color-vermilion: #c1361f;
   --color-felt: #1d3f31;
   --color-brass: #a9822f;
-  --font-display: "Bodoni Moda", "Bodoni MT", Didot, Georgia, serif;
-  --font-body: "Archivo", "Helvetica Neue", Helvetica, sans-serif;
+  --font-display: "Spicy Rice", "Bookman Old Style", Georgia, serif;
+  --font-engrave: "Aladin", "Palatino Linotype", Georgia, serif;
+  --font-fair: "Flavors", "Bookman Old Style", Georgia, serif;
+  --font-body: "Public Sans", "Helvetica Neue", Helvetica, sans-serif;
   --font-tick: "Courier Prime", "Courier New", monospace;
 }
 
@@ -626,18 +629,31 @@ body {
 /* ── Typographic primitives ── */
 .p-display {
   font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 0.94;
-  letter-spacing: -0.015em;
-  font-variation-settings: "opsz" 88;
+  font-weight: 400; /* Spicy Rice ships one weight; hierarchy comes from size */
+  line-height: 1.04;
+  letter-spacing: 0.002em;
+}
+
+/* Second display voice: engraved, for card faces and the nameplate */
+.p-engrave {
+  font-family: var(--font-engrave);
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+/* Hand-painted fairground voice, reserved for the marquee band */
+.p-fair {
+  font-family: var(--font-fair);
+  font-weight: 400;
+  letter-spacing: 0.1em;
 }
 
 .p-tick {
   font-family: var(--font-tick);
   text-transform: uppercase;
-  letter-spacing: 0.24em;
-  font-size: 0.66rem;
-  line-height: 1;
+  letter-spacing: 0.18em;
+  font-size: 0.75rem;
+  line-height: 1.35;
 }
 
 .p-lede {
@@ -653,7 +669,7 @@ body {
 /* Oversized outlined numeral for the House Rules section */
 .p-numeral {
   font-family: var(--font-display);
-  font-weight: 500;
+  font-weight: 400;
   font-size: clamp(3.5rem, 7vw, 5.5rem);
   line-height: 0.8;
   color: transparent;
@@ -710,6 +726,19 @@ body {
     background-color 200ms ease, color 200ms ease;
 }
 
+.p-btn:focus-visible,
+.p-link:focus-visible,
+.p-card-link:focus-visible {
+  outline: 2px solid var(--color-vermilion);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+.p-felt .p-btn:focus-visible,
+.p-felt .p-link:focus-visible {
+  outline-color: var(--color-paper);
+}
+
 .p-btn-solid {
   background: var(--color-ink-deep);
   color: var(--color-paper);
@@ -755,6 +784,15 @@ body {
   background-size: 100% 2px;
 }
 
+/* Meet the 44px touch-target floor without changing the visual rule position */
+@media (pointer: coarse) {
+  .p-link {
+    min-height: 44px;
+    align-items: flex-end;
+    padding-bottom: 0.75rem;
+  }
+}
+
 /* ── Playing cards ── */
 .p-card {
   position: relative;
@@ -796,10 +834,10 @@ body {
 .p-hand > * .p-card:hover { transform: translateY(-14px) rotate(0deg); }
 
 .p-pip {
-  font-family: var(--font-display);
-  font-weight: 600;
-  line-height: 0.86;
-  font-size: 1.05rem;
+  font-family: var(--font-engrave);
+  font-weight: 400;
+  line-height: 0.9;
+  font-size: 1.25rem;
   text-align: center;
 }
 
@@ -834,12 +872,16 @@ body {
 
 .p-card:hover .p-medallion::after { border-color: rgba(193, 54, 31, 0.45); }
 
+/* Keeps every card's title/discipline block the same height so the
+   medallions and tag rows line up across the hand */
+.p-card-title { min-height: 2.6em; display: flex; align-items: center; }
+
 .p-tag {
   font-family: var(--font-tick);
   text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-size: 0.58rem;
-  padding: 0.3rem 0.55rem;
+  letter-spacing: 0.14em;
+  font-size: 0.7rem;
+  padding: 0.35rem 0.6rem;
   border: 1px solid rgba(23, 19, 14, 0.24);
   border-radius: 2px;
   color: var(--color-ink-soft);
@@ -948,16 +990,18 @@ body {
 /* Drop cap on the hero lede */
 .p-dropcap::first-letter {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 3.65rem;
-  line-height: 0.78;
+  font-weight: 400;
+  font-size: 3.1rem;
+  line-height: 0.86;
   float: left;
-  padding: 0.16rem 0.6rem 0 0;
+  padding: 0.2rem 0.55rem 0 0;
   color: var(--color-vermilion);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .p-marquee { animation: none; }
   .p-card,
-  .p-medallion { transition-duration: 1ms; }
+  .p-medallion,
+  .p-btn,
+  .p-link { transition-duration: 1ms; }
 }

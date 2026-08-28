@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Layers,
   Hash,
@@ -128,15 +128,15 @@ const MARQUEE_WORDS = [
 /* ─── Hero deck: three fanned cards, each taking its turn face-up ─── */
 function HeroDeck() {
   const [faceUp, setFaceUp] = useState(1);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) return;
+    if (reduce) return;
     const id = window.setInterval(() => {
       setFaceUp((prev) => (prev + 1) % DECK.length);
     }, 3400);
     return () => window.clearInterval(id);
-  }, []);
+  }, [reduce]);
 
   return (
     <div className="p-deck relative w-full aspect-[7/6] max-w-[520px] mx-auto">
@@ -174,7 +174,7 @@ function HeroDeck() {
               aria-label={`Turn over the ${card.label} card`}
               className="absolute inset-0 cursor-pointer rounded-[14px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-vermilion"
               style={{ transformStyle: "preserve-3d" }}
-              initial={{ opacity: 0, y: 70, rotate: 0 }}
+              initial={reduce ? false : { opacity: 0, y: 70, rotate: 0 }}
               animate={{
                 opacity: 1,
                 y: 0,
@@ -192,7 +192,7 @@ function HeroDeck() {
               <div className="p-deck-face p-deck-back" />
               <div className="p-deck-face p-deck-front">
                 <span
-                  className={`p-display text-3xl ${card.red ? "text-vermilion" : "text-ink-deep"}`}
+                  className={`p-engrave text-4xl ${card.red ? "text-vermilion" : "text-ink-deep"}`}
                 >
                   {card.suit}
                 </span>
@@ -210,17 +210,18 @@ function HeroDeck() {
 /* ─── One game, printed as a playing card ─── */
 function GameCard({ game, index }: { game: (typeof GAMES)[number]; index: number }) {
   const Icon = game.icon;
+  const reduce = useReducedMotion();
   const pipTone = game.red ? "p-pip-red" : "p-pip-black";
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 34 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={reduce ? false : { opacity: 0, y: 34 }}
+      whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.7, delay: index * 0.09, ease: EASE }}
       className="h-full"
     >
-      <Link to={game.href} className="block h-full group">
+      <Link to={game.href} className="p-card-link block h-full rounded-xl group">
         <article className="p-card h-full px-7 pt-7 pb-8">
           {/* Corner index — top-left upright, bottom-right inverted, as printed */}
           <div className={`p-pip ${pipTone} absolute top-4 left-4 z-10`}>
@@ -233,18 +234,18 @@ function GameCard({ game, index }: { game: (typeof GAMES)[number]; index: number
           </div>
 
           <div className="relative z-10 flex flex-col items-center text-center h-full pt-6">
-            <span className="p-tick text-ink-soft/70 mb-6">{game.no}</span>
+            <span className="p-tick text-ink-soft mb-6">{game.no}</span>
 
             <div className="p-medallion mb-7">
               <Icon className="w-8 h-8 text-ink-deep" strokeWidth={1.25} />
             </div>
 
-            <h3 className="p-display text-[1.75rem] mb-2 group-hover:text-vermilion transition-colors duration-300">
+            <h3 className="p-card-title p-display text-[1.3rem] leading-tight mb-2 group-hover:text-vermilion transition-colors duration-300">
               {game.title}
             </h3>
-            <p className="p-tick text-vermilion/80 mb-5">{game.discipline}</p>
+            <p className="p-tick text-vermilion mb-5">{game.discipline}</p>
 
-            <p className="text-[0.9rem] leading-[1.7] text-ink-soft mb-7 max-w-[260px]">
+            <p className="text-[0.95rem] leading-[1.7] text-ink-soft mb-7 max-w-[260px]">
               {game.description}
             </p>
 
@@ -267,6 +268,8 @@ function GameCard({ game, index }: { game: (typeof GAMES)[number]; index: number
 }
 
 export default function Home() {
+  const reduce = useReducedMotion();
+
   return (
     <div className="parlour">
       <div className="parlour-paper" aria-hidden="true" />
@@ -275,14 +278,18 @@ export default function Home() {
         {/* ━━━ MASTHEAD ━━━ */}
         <div className="max-w-[1180px] mx-auto px-6 sm:px-10 pt-8">
           <motion.div
-            initial={{ opacity: 0 }}
+            initial={reduce ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8 }}
             className="p-rule-double pt-3 flex items-center justify-between gap-4 text-ink-soft"
           >
             <span className="p-tick hidden sm:block">Est. MMXXVI</span>
-            <span className="p-tick text-center flex-1 text-ink-deep">
-              The Memory Parlour <span className="text-vermilion">✦</span> A House of Four Diversions
+            <span className="p-engrave text-center flex-1 text-ink-deep text-[0.95rem] tracking-[0.14em] uppercase">
+              The Memory Parlour
+              <span className="hidden xs:inline">
+                <span className="text-vermilion mx-2">✦</span>
+                A House of Four Diversions
+              </span>
             </span>
             <span className="p-tick hidden sm:block">Vol. I</span>
           </motion.div>
@@ -294,7 +301,7 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
             <motion.div
               className="lg:col-span-7"
-              initial={{ opacity: 0, y: 28 }}
+              initial={reduce ? false : { opacity: 0, y: 28 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.9, ease: EASE }}
             >
@@ -303,12 +310,12 @@ export default function Home() {
                 <span className="p-tick text-ink-soft">Games of Recollection</span>
               </div>
 
-              <h1 className="p-display text-[clamp(3.1rem,8.4vw,6.6rem)] mb-8">
+              <h1 className="p-display text-[clamp(2.5rem,6.6vw,5.1rem)] mb-8">
                 Sharpen the mind,
                 <br />
                 one card
                 <br />
-                <em className="text-vermilion not-italic font-normal italic">at a time.</em>
+                <span className="text-vermilion">at a time.</span>
               </h1>
 
               <div className="p-rule pt-7 max-w-[34rem]">
@@ -338,7 +345,7 @@ export default function Home() {
                   { n: "∞", l: "Rounds" },
                 ].map((stat, i) => (
                   <div key={stat.l} className={i > 0 ? "p-hair-v pl-5" : "pr-5"}>
-                    <div className="p-display text-[2.6rem] leading-none mb-2">{stat.n}</div>
+                    <div className="p-display text-[2.15rem] leading-none mb-2">{stat.n}</div>
                     <div className="p-tick text-ink-soft">{stat.l}</div>
                   </div>
                 ))}
@@ -357,7 +364,7 @@ export default function Home() {
             {[0, 1].map((seg) => (
               <div className="p-marquee-seg" key={seg}>
                 {MARQUEE_WORDS.map((word) => (
-                  <span key={word} className="p-tick flex items-center gap-11">
+                  <span key={word} className="p-fair text-[0.95rem] uppercase flex items-center gap-11">
                     {word}
                     <span className="text-vermilion text-[1rem] leading-none">✦</span>
                   </span>
@@ -370,8 +377,8 @@ export default function Home() {
         {/* ━━━ THE HAND ━━━ */}
         <section className="max-w-[1180px] mx-auto px-6 sm:px-10 pt-20 sm:pt-28 pb-16 sm:pb-24">
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={reduce ? false : { opacity: 0, y: 24 }}
+            whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: EASE }}
             className="p-rule pt-6 mb-14 grid grid-cols-1 md:grid-cols-12 gap-6 items-end"
@@ -380,7 +387,7 @@ export default function Home() {
               <span className="p-tick text-vermilion">Section One</span>
               <p className="p-tick text-ink-soft mt-3">The Hand</p>
             </div>
-            <h2 className="md:col-span-8 p-display text-[clamp(2.2rem,4.6vw,3.6rem)]">
+            <h2 className="md:col-span-8 p-display text-[clamp(1.9rem,3.7vw,2.9rem)]">
               Four games,
               <br />
               four disciplines.
@@ -397,8 +404,8 @@ export default function Home() {
         {/* ━━━ HOUSE RULES ━━━ */}
         <section className="max-w-[1180px] mx-auto px-6 sm:px-10 py-16 sm:py-24">
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={reduce ? false : { opacity: 0, y: 24 }}
+            whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7, ease: EASE }}
             className="p-rule pt-6 mb-14 grid grid-cols-1 md:grid-cols-12 gap-6 items-end"
@@ -407,7 +414,7 @@ export default function Home() {
               <span className="p-tick text-vermilion">Section Two</span>
               <p className="p-tick text-ink-soft mt-3">House Rules</p>
             </div>
-            <h2 className="md:col-span-8 p-display text-[clamp(2.2rem,4.6vw,3.6rem)]">
+            <h2 className="md:col-span-8 p-display text-[clamp(1.9rem,3.7vw,2.9rem)]">
               What the house
               <br />
               provides.
@@ -420,8 +427,8 @@ export default function Home() {
               return (
                 <motion.div
                   key={rule.numeral}
-                  initial={{ opacity: 0, y: 28 }}
-                  whileInView={{ opacity: 1, y: 0 }}
+                  initial={reduce ? false : { opacity: 0, y: 28 }}
+                  whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-60px" }}
                   transition={{ duration: 0.7, delay: i * 0.12, ease: EASE }}
                   className="p-rule-item group"
@@ -434,8 +441,8 @@ export default function Home() {
                     />
                   </div>
                   <span className="p-tick text-vermilion">{rule.kicker}</span>
-                  <h3 className="p-display text-[1.65rem] mt-4 mb-4">{rule.title}</h3>
-                  <p className="text-[0.9rem] leading-[1.75] text-ink-soft max-w-[24rem]">{rule.body}</p>
+                  <h3 className="p-display text-[1.35rem] leading-snug mt-4 mb-4">{rule.title}</h3>
+                  <p className="text-[0.95rem] leading-[1.75] text-ink-soft max-w-[24rem]">{rule.body}</p>
                 </motion.div>
               );
             })}
@@ -445,8 +452,8 @@ export default function Home() {
         {/* ━━━ THE TABLE (CTA) ━━━ */}
         <section className="max-w-[1180px] mx-auto px-6 sm:px-10 pb-20 sm:pb-28">
           <motion.div
-            initial={{ opacity: 0, y: 32 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={reduce ? false : { opacity: 0, y: 32 }}
+            whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8, ease: EASE }}
             className="p-felt rounded-sm px-8 sm:px-16 py-16 sm:py-24 text-center"
@@ -459,13 +466,13 @@ export default function Home() {
                 <span className="text-paper/70">♣</span>
               </div>
 
-              <h2 className="p-display text-[clamp(2.4rem,6vw,4.75rem)] mb-7">
+              <h2 className="p-display text-[clamp(2rem,4.4vw,3.5rem)] mb-7 leading-[1.1]">
                 The table is set.
                 <br />
                 Take a seat.
               </h2>
 
-              <p className="text-paper/65 text-[1.0625rem] leading-[1.7] max-w-[38ch] mb-11">
+              <p className="text-paper/75 text-[1.0625rem] leading-[1.7] max-w-[42ch] mb-11">
                 No account, no setup, no waiting. Pick a game and the first hand is dealt in seconds.
               </p>
 
