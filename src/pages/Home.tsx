@@ -1,349 +1,492 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Palette,
-  Users,
-  Trophy,
-  Zap,
-  Sparkles,
-  ArrowRight,
   Layers,
   Hash,
-  Grid3X3 as GridIcon,
+  Grid3X3,
   Type as WordIcon,
+  Trophy,
+  Users,
+  Palette,
+  ArrowRight,
+  ArrowUpRight,
 } from "lucide-react";
 
-/* ─── DATA ─── */
+/* ─────────────────────────────────────────────────────────
+   THE MEMORY PARLOUR
+   A letterpress broadsheet for a house of four diversions.
+   ───────────────────────────────────────────────────────── */
+
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
 const GAMES = [
   {
     id: "card-flip",
+    rank: "A",
+    suit: "♠",
+    red: false,
+    no: "No. 01",
     title: "Card Flip Match",
-    icon: Layers,
+    discipline: "Concentration",
     description:
-      "A refined concentration challenge supporting both solo and competitive play.",
-    tags: ["Single Player", "Multiplayer"],
-    gradient: "from-teal-500/25 to-cyan-600/10",
-    glowColor: "rgba(0, 194, 168, 0.15)",
+      "Turn two, hold the picture, turn again. The oldest test of a steady memory — alone or against a rival.",
+    tags: ["Solo", "Table for two"],
+    icon: Layers,
     href: "/lobby/card-flip",
   },
   {
     id: "number-sequence",
+    rank: "K",
+    suit: "♦",
+    red: true,
+    no: "No. 02",
     title: "Number Sequence",
-    icon: Hash,
+    discipline: "Order",
     description:
-      "Test your sequential recall and progressively enhance your performance.",
-    tags: ["Single Player"],
-    gradient: "from-sky-500/25 to-blue-600/10",
-    glowColor: "rgba(56, 189, 248, 0.15)",
+      "Digits arrive, then vanish. Return them in the order they were dealt, one longer with every round survived.",
+    tags: ["Solo"],
+    icon: Hash,
     href: "/lobby/number-sequence",
   },
   {
     id: "pattern-memory",
+    rank: "Q",
+    suit: "♣",
+    red: false,
+    no: "No. 03",
     title: "Pattern Memory",
-    icon: GridIcon,
-    description: "Master spatial visualization through rapidly evolving grid challenges.",
-    tags: ["Single Player"],
-    gradient: "from-amber-500/30 to-orange-600/10",
-    glowColor: "rgba(245, 165, 36, 0.15)",
+    discipline: "Place",
+    description:
+      "A grid lights up and goes dark. Where it fell is the whole question — a study in spatial recall.",
+    tags: ["Solo"],
+    icon: Grid3X3,
     href: "/lobby/pattern-memory",
   },
   {
     id: "word-match",
+    rank: "J",
+    suit: "♥",
+    red: true,
+    no: "No. 04",
     title: "Word Match",
-    icon: WordIcon,
+    discipline: "Lexicon",
     description:
-      "Enhance linguistic recall through structured card-based matching.",
-    tags: ["Single Player", "Multiplayer"],
-    gradient: "from-rose-500/25 to-pink-600/10",
-    glowColor: "rgba(244, 63, 94, 0.15)",
+      "Pair the words before the words pair you. A quiet duel of vocabulary and nerve.",
+    tags: ["Solo", "Table for two"],
+    icon: WordIcon,
     href: "/lobby/word-match",
   },
-];
+] as const;
 
-
-const FEATURES = [
+const HOUSE_RULES = [
   {
-    icon: Palette,
-    tag: "THEMES",
-    title: "Personalized Experience",
-    desc: "A variety of visual themes including minimalist colors and expressive iconography.",
-  },
-  {
+    numeral: "01",
     icon: Users,
-    tag: "REALTIME",
-    title: "Synchronous Play",
-    desc: "Engage in real-time competition through private rooms and instant state synchronization.",
+    kicker: "The Table",
+    title: "Two seats, one deck",
+    body: "Open a private room, pass the link, and both hands stay in step. Every flip lands on the other screen the moment it happens.",
   },
   {
+    numeral: "02",
     icon: Trophy,
-    tag: "RANKED",
-    title: "Performance Metrics",
-    desc: "Track and compare high scores across all game modes on a global scale.",
+    kicker: "The Ledger",
+    title: "Every score recorded",
+    body: "Runs are written down and ranked across all four games. The standings keep an honest account of who is sharpest this week.",
+  },
+  {
+    numeral: "03",
+    icon: Palette,
+    kicker: "The House",
+    title: "Dressed to your taste",
+    body: "Choose the deck you play with — plain colours, bold symbols, or something louder. The rules never change; the face of them does.",
   },
 ];
 
+const DECK = [
+  { label: "Concentration", suit: "♠", red: false, icon: Layers },
+  { label: "Sequence", suit: "♦", red: true, icon: Hash },
+  { label: "Pattern", suit: "♣", red: false, icon: Grid3X3 },
+];
 
+const DECK_LAYOUT = [
+  { rotate: -14, x: "-88%", y: "-44%", z: 1 },
+  { rotate: -1, x: "-50%", y: "-56%", z: 3 },
+  { rotate: 13, x: "-12%", y: "-42%", z: 2 },
+];
 
-/* ─── ANIMATION VARIANTS ─── */
-const containerVariants = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.12 },
-  },
-};
+const MARQUEE_WORDS = [
+  "Concentration",
+  "Sequence",
+  "Pattern",
+  "Lexicon",
+  "Solo Play",
+  "Live Rooms",
+  "Standings",
+];
 
+/* ─── Hero deck: three fanned cards, each taking its turn face-up ─── */
+function HeroDeck() {
+  const [faceUp, setFaceUp] = useState(1);
 
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 30 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.6, ease: [0.2, 0.8, 0.2, 1] as any }
-  },
-};
-
-const GlassTile = ({ game }: { game: typeof GAMES[0] }) => {
-  const Icon = game.icon;
-  const cardRef = import.meta.env.SSR ? null : (el: HTMLDivElement | null) => {
-    if (!el) return;
-    el.addEventListener("mousemove", (e) => {
-      const rect = el.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      el.style.setProperty("--mouse-x", `${x}px`);
-      el.style.setProperty("--mouse-y", `${y}px`);
-    });
-  };
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
+    const id = window.setInterval(() => {
+      setFaceUp((prev) => (prev + 1) % DECK.length);
+    }, 3400);
+    return () => window.clearInterval(id);
+  }, []);
 
   return (
-    <motion.div variants={cardVariants} className="flex h-full">
-      <Link to={game.href} className="flex flex-1 group h-full">
-        <div
-          ref={cardRef as any}
-          className="glass-tile flex-1"
-        >
-          {/* Background Glow Orb */}
-          <div className={`bento-glow-orb ${game.id === 'card-flip' ? 'bento-glow-teal' : game.id === 'number-sequence' ? 'bento-glow-indigo' : game.id === 'pattern-memory' ? 'bento-glow-amber' : 'bento-glow-rose'} w-64 h-64 -bottom-20 -right-20 opacity-20 group-hover:opacity-40 transition-opacity duration-700`} />
+    <div className="p-deck relative w-full aspect-[7/6] max-w-[520px] mx-auto">
+      {/* Halftone medallion sitting behind the hand */}
+      <div
+        className="p-halftone absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] aspect-square rounded-full text-vermilion opacity-[0.22]"
+        style={{ maskImage: "radial-gradient(circle, #000 38%, transparent 71%)", WebkitMaskImage: "radial-gradient(circle, #000 38%, transparent 71%)" }}
+        aria-hidden="true"
+      />
+      <span
+        className="p-display absolute -top-6 -right-2 text-[11rem] leading-none text-ink-deep/[0.06] select-none pointer-events-none"
+        aria-hidden="true"
+      >
+        ♠
+      </span>
 
-          <div className="glow-ring relative z-10">
-            <Icon className="w-10 h-10 text-white group-hover:scale-110 transition-transform duration-500 drop-shadow-[0_0_15px_rgba(255,255,255,0.4)]" />
+      {DECK.map((card, i) => {
+        const layout = DECK_LAYOUT[i];
+        const Icon = card.icon;
+        const up = faceUp === i;
+        return (
+          /* Placement is plain CSS (framer-motion can't tween calc()); the
+             motion layer only handles the lift, the fan and the turn. */
+          <div
+            key={card.label}
+            className="absolute left-1/2 top-1/2 w-[46%] aspect-[5/7]"
+            style={{
+              transform: `translate(${layout.x}, ${layout.y})`,
+              zIndex: up ? 10 : layout.z,
+            }}
+          >
+            <motion.button
+              type="button"
+              onClick={() => setFaceUp(i)}
+              aria-label={`Turn over the ${card.label} card`}
+              className="absolute inset-0 cursor-pointer rounded-[14px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-vermilion"
+              style={{ transformStyle: "preserve-3d" }}
+              initial={{ opacity: 0, y: 70, rotate: 0 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                rotate: layout.rotate + (up ? -layout.rotate * 0.45 : 0),
+                scale: up ? 1.06 : 1,
+                rotateY: up ? 180 : 0,
+              }}
+              transition={{
+                opacity: { duration: 0.7, delay: 0.35 + i * 0.12, ease: EASE },
+                y: { duration: 0.9, delay: 0.35 + i * 0.12, ease: EASE },
+                rotateY: { duration: 0.85, ease: EASE },
+                default: { duration: 0.75, ease: EASE },
+              }}
+            >
+              <div className="p-deck-face p-deck-back" />
+              <div className="p-deck-face p-deck-front">
+                <span
+                  className={`p-display text-3xl ${card.red ? "text-vermilion" : "text-ink-deep"}`}
+                >
+                  {card.suit}
+                </span>
+                <Icon className="w-9 h-9 text-ink-deep" strokeWidth={1.25} />
+                <span className="p-tick text-ink-soft">{card.label}</span>
+              </div>
+            </motion.button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── One game, printed as a playing card ─── */
+function GameCard({ game, index }: { game: (typeof GAMES)[number]; index: number }) {
+  const Icon = game.icon;
+  const pipTone = game.red ? "p-pip-red" : "p-pip-black";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 34 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.7, delay: index * 0.09, ease: EASE }}
+      className="h-full"
+    >
+      <Link to={game.href} className="block h-full group">
+        <article className="p-card h-full px-7 pt-7 pb-8">
+          {/* Corner index — top-left upright, bottom-right inverted, as printed */}
+          <div className={`p-pip ${pipTone} absolute top-4 left-4 z-10`}>
+            <div>{game.rank}</div>
+            <div className="text-[0.8em]">{game.suit}</div>
+          </div>
+          <div className={`p-pip ${pipTone} absolute bottom-4 right-4 rotate-180 z-10`}>
+            <div>{game.rank}</div>
+            <div className="text-[0.8em]">{game.suit}</div>
           </div>
 
-          <div className="relative z-10 flex flex-col items-center">
-            <h3 className="font-extrabold text-white text-2xl mb-4 group-hover:text-highlight transition-colors tracking-tight">
+          <div className="relative z-10 flex flex-col items-center text-center h-full pt-6">
+            <span className="p-tick text-ink-soft/70 mb-6">{game.no}</span>
+
+            <div className="p-medallion mb-7">
+              <Icon className="w-8 h-8 text-ink-deep" strokeWidth={1.25} />
+            </div>
+
+            <h3 className="p-display text-[1.75rem] mb-2 group-hover:text-vermilion transition-colors duration-300">
               {game.title}
             </h3>
-            <p className="text-slate-400 text-sm leading-relaxed mb-8 max-w-[240px]">
+            <p className="p-tick text-vermilion/80 mb-5">{game.discipline}</p>
+
+            <p className="text-[0.9rem] leading-[1.7] text-ink-soft mb-7 max-w-[260px]">
               {game.description}
             </p>
-            <div className="flex gap-2 flex-wrap justify-center mt-auto">
+
+            <div className="mt-auto flex flex-wrap gap-2 justify-center">
               {game.tags.map((tag) => (
-                <span key={tag} className="chip bg-white/5 border border-white/10 text-white/70 px-4 py-1.5 text-xs font-bold uppercase tracking-widest group-hover:border-highlight/40 group-hover:text-highlight transition-all">
+                <span key={tag} className="p-tag">
                   {tag}
                 </span>
               ))}
             </div>
+
+            <span className="p-tick mt-7 inline-flex items-center gap-2 text-ink-deep opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+              Deal <ArrowRight className="w-3.5 h-3.5" />
+            </span>
           </div>
-        </div>
+        </article>
       </Link>
     </motion.div>
   );
-};
+}
 
-/* ─── COMPONENT ─── */
 export default function Home() {
   return (
-    <div className="relative min-h-screen bg-ink overflow-x-hidden">
-      <div className="app-background" />
+    <div className="parlour">
+      <div className="parlour-paper" aria-hidden="true" />
 
-      {/* ━━━ HERO SECTION ━━━ */}
-      <section className="relative pt-24 sm:pt-32 pb-12 sm:pb-20 z-10">
-        <div className="max-w-7xl mx-auto px-6 sm:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+      <div className="relative z-10">
+        {/* ━━━ MASTHEAD ━━━ */}
+        <div className="max-w-[1180px] mx-auto px-6 sm:px-10 pt-8">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8 }}
+            className="p-rule-double pt-3 flex items-center justify-between gap-4 text-ink-soft"
+          >
+            <span className="p-tick hidden sm:block">Est. MMXXVI</span>
+            <span className="p-tick text-center flex-1 text-ink-deep">
+              The Memory Parlour <span className="text-vermilion">✦</span> A House of Four Diversions
+            </span>
+            <span className="p-tick hidden sm:block">Vol. I</span>
+          </motion.div>
+          <div className="p-rule mt-3" />
+        </div>
 
-            {/* Main Featured Bento */}
+        {/* ━━━ HERO ━━━ */}
+        <section className="max-w-[1180px] mx-auto px-6 sm:px-10 pt-14 sm:pt-20 pb-16 sm:pb-24">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
             <motion.div
-              className="lg:col-span-8 bento-card bento-noise bento-gradient-primary group p-10 sm:p-16 flex flex-col justify-center relative min-h-[500px]"
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }}
+              className="lg:col-span-7"
+              initial={{ opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.9, ease: EASE }}
             >
-              <div className="bento-glow-orb bento-glow-teal w-[500px] h-[500px] -top-32 -left-32 opacity-30 group-hover:opacity-50 transition-all duration-1000" />
+              <div className="flex items-center gap-3 mb-8">
+                <span className="w-2 h-2 bg-vermilion rotate-45" aria-hidden="true" />
+                <span className="p-tick text-ink-soft">Games of Recollection</span>
+              </div>
 
-              <div className="relative z-10">
-                <h1 className="text-6xl sm:text-7xl lg:text-8xl font-black text-white mb-8 leading-[0.9] tracking-tighter">
-                  Challenge Your <br />
-                  <span className="bento-title-gradient">Cognitive Potential</span>
-                </h1>
-                <p className="text-xl text-slate-400 mb-10 max-w-lg leading-relaxed font-medium">
-                  A refined suite of cognitive challenges designed for mental clarity and focus. Experience precision-engineered games in a minimalist environment.
+              <h1 className="p-display text-[clamp(3.1rem,8.4vw,6.6rem)] mb-8">
+                Sharpen the mind,
+                <br />
+                one card
+                <br />
+                <em className="text-vermilion not-italic font-normal italic">at a time.</em>
+              </h1>
+
+              <div className="p-rule pt-7 max-w-[34rem]">
+                <p className="p-lede p-dropcap">
+                  Four small games, each built around a single question — how much can you hold?
+                  Play a hand on your own, or open a room and put a friend across the table.
+                  No download, no ceremony. The deck is already shuffled.
                 </p>
-                <div className="flex flex-wrap gap-4">
-                  <Link
-                    to="/lobby/card-flip"
-                    className="btn btn-primary btn-primary-pulse px-10 py-5 rounded-2xl text-lg font-bold flex items-center gap-3 shadow-[0_0_40px_rgba(0,194,168,0.3)]"
-                  >
-                    Get Started
-                    <Zap className="w-5 h-5 fill-current" />
-                  </Link>
-                </div>
               </div>
-            </motion.div>
 
-            {/* Side Bento Column */}
-            <div className="lg:col-span-4 flex flex-col gap-6">
-
-              {/* Leaderboard Preview */}
-              <motion.div
-                className="flex-1 bento-card bento-noise group p-8 flex flex-col justify-between"
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, delay: 0.1, ease: [0.2, 0.8, 0.2, 1] }}
-              >
-                <div className="bento-glow-orb bento-glow-amber w-64 h-64 -top-10 -right-10 group-hover:scale-125 transition-transform duration-700" />
-                <div className="relative z-10">
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-6 shadow-lg">
-                    <Trophy className="w-7 h-7 text-amber-500" />
-                  </div>
-                  <h3 className="text-2xl font-black text-white mb-2 tracking-tight">Global Rank</h3>
-                  <p className="text-slate-400 text-sm font-medium leading-relaxed">Compete with thousands of players worldwide.</p>
-                </div>
-                <Link to="/leaderboard" className="relative z-10 mt-6 text-amber-500 font-bold text-sm inline-flex items-center gap-2 group-hover:translate-x-1 transition-transform">
-                  View Leaderboard <ArrowRight className="w-4 h-4" />
+              <div className="flex flex-wrap items-center gap-x-9 gap-y-5 mt-10">
+                <Link to="/lobby/card-flip" className="p-btn p-btn-solid">
+                  Deal me in
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
-              </motion.div>
-
-              {/* Multiplayer Banner */}
-              <motion.div
-                className="flex-1 bento-card bento-noise group p-8 relative"
-                initial={{ opacity: 0, x: 30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, delay: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-              >
-                <div className="bento-glow-orb bento-glow-indigo w-64 h-64 -top-10 -left-10 group-hover:scale-110 transition-transform duration-700" />
-
-                <div className="relative z-10 flex flex-col h-full justify-between">
-                  <div className="flex -space-x-4 mb-4">
-                     <div className="w-12 h-12 rounded-full border-2 border-[#0f1630] bg-indigo-500 flex items-center justify-center text-xs font-black text-white shadow-xl z-30">P1</div>
-                     <div className="w-12 h-12 rounded-full border-2 border-[#0f1630] bg-teal-500 flex items-center justify-center text-xs font-black text-white shadow-xl z-20">P2</div>
-                     <div className="w-12 h-12 rounded-full border-2 border-[#0f1630] bg-cyan-500 flex items-center justify-center text-xs font-black text-white shadow-xl z-10">P3</div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-2xl font-black text-white mb-2 tracking-tight">Multiplayer</h3>
-                    <p className="text-slate-400 text-sm font-medium leading-relaxed">Challenge friends in real-time matches.</p>
-                  </div>
-                </div>
-              </motion.div>
-
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-      {/* ━━━ GAMES BENTO GRID ━━━ */}
-      <section className="w-full max-w-7xl mx-auto px-6 sm:px-8 py-12 sm:py-24">
-        <motion.div
-          className="text-center mb-16 relative"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-        >
-          <h2 className="text-4xl sm:text-6xl font-black text-white tracking-tighter relative z-10">
-            Explore Our <span className="text-highlight drop-shadow-[0_0_20px_rgba(110,231,255,0.3)]">Collection</span>
-          </h2>
-        </motion.div>
-
-        <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8"
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-100px" }}
-        >
-          {GAMES.map((game) => (
-            <GlassTile key={game.id} game={game} />
-          ))}
-        </motion.div>
-      </section>
-
-      {/* ━━━ FEATURES BENTO ━━━ */}
-      <section className="w-full max-w-7xl mx-auto px-6 sm:px-8 py-12 sm:py-24">
-        <motion.div
-          className="text-center mb-16 relative"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-        >
-          <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tighter relative z-10">
-            Advanced <span className="text-accent drop-shadow-[0_0_20px_rgba(0,194,168,0.3)]">Capabilities</span>
-          </h2>
-        </motion.div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {FEATURES.map(({ icon: Icon, tag, title, desc }) => (
-            <motion.div 
-              key={title} 
-              variants={cardVariants}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              className="bento-card bento-noise p-10 flex flex-col items-center text-center group"
-            >
-              <div className="w-20 h-20 rounded-[2.5rem] bg-linear-to-br from-accent/20 to-highlight/10 flex items-center justify-center mb-8 border border-white/10 group-hover:scale-110 group-hover:border-accent/30 transition-all duration-500 shadow-2xl">
-                <Icon className="w-10 h-10 text-accent" />
+                <Link to="/leaderboard" className="p-link text-ink-deep">
+                  Read the standings
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </Link>
               </div>
-              <span className="badge mono text-[10px] mb-4 font-black tracking-[0.2em]">{tag}</span>
-              <h3 className="font-black text-white text-2xl mb-4 tracking-tight group-hover:text-accent transition-colors">
-                {title}
-              </h3>
-              <p className="text-slate-400 text-base leading-relaxed font-medium">
-                {desc}
-              </p>
+
+              {/* Running heads */}
+              <div className="p-rule mt-12 pt-6 grid grid-cols-3 max-w-[34rem]">
+                {[
+                  { n: "IV", l: "Diversions" },
+                  { n: "II", l: "Ways to play" },
+                  { n: "∞", l: "Rounds" },
+                ].map((stat, i) => (
+                  <div key={stat.l} className={i > 0 ? "p-hair-v pl-5" : "pr-5"}>
+                    <div className="p-display text-[2.6rem] leading-none mb-2">{stat.n}</div>
+                    <div className="p-tick text-ink-soft">{stat.l}</div>
+                  </div>
+                ))}
+              </div>
             </motion.div>
-          ))}
-        </div>
-      </section>
 
-      {/* ━━━ BOTTOM CTA ━━━ */}
-      <section className="w-full max-w-7xl mx-auto px-6 sm:px-8 pb-16 sm:pb-32">
-        <motion.div
-          className="bento-card bento-noise bento-gradient-primary border-t border-l border-white/20 p-16 sm:p-24 text-center relative overflow-hidden group shadow-[0_40px_100px_-15px_rgba(0,0,0,0.7)]"
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-        >
-          {/* Background massive glow floating orb */}
-          <div className="absolute inset-0 bento-glow-orb bento-glow-indigo w-full h-full scale-150 opacity-20 pointer-events-none group-hover:scale-[1.6] group-hover:opacity-40 transition-all duration-1000" />
-          
-          <div className="absolute top-0 right-0 w-96 h-96 bg-highlight/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-accent/10 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2" />
-
-          <div className="relative z-10 flex flex-col items-center">
-            <div className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center mb-8 shadow-2xl backdrop-blur-xl">
-              <Sparkles className="w-10 h-10 text-highlight drop-shadow-[0_0_20px_rgba(110,231,255,0.6)]" />
+            <div className="lg:col-span-5">
+              <HeroDeck />
             </div>
-            
-            <h2 className="text-4xl sm:text-7xl font-black text-white mb-8 tracking-tighter max-w-2xl leading-[0.9]">
-              Experience the <span className="gradient-text">Collection</span>.
-            </h2>
-            <p className="text-slate-300 text-lg sm:text-2xl mb-12 max-w-2xl mx-auto leading-relaxed font-medium opacity-80">
-              Begin your experience immediately. No registration required.
-            </p>
-            <Link
-              to="/lobby/card-flip"
-              className="btn btn-primary btn-primary-pulse px-16 py-6 rounded-2xl text-xl font-black inline-flex items-center gap-4 shadow-[0_20px_50px_rgba(0,194,168,0.4)] hover:shadow-[0_20px_70px_rgba(0,194,168,0.6)] transition-all"
-            >
-              Start Now
-              <ArrowRight className="w-7 h-7 transition-transform group-hover:translate-x-3" />
-            </Link>
           </div>
-        </motion.div>
-      </section>
+        </section>
+
+        {/* ━━━ MARQUEE BAND ━━━ */}
+        <div className="bg-ink-deep text-paper py-4 overflow-hidden select-none" aria-hidden="true">
+          <div className="p-marquee">
+            {[0, 1].map((seg) => (
+              <div className="p-marquee-seg" key={seg}>
+                {MARQUEE_WORDS.map((word) => (
+                  <span key={word} className="p-tick flex items-center gap-11">
+                    {word}
+                    <span className="text-vermilion text-[1rem] leading-none">✦</span>
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ━━━ THE HAND ━━━ */}
+        <section className="max-w-[1180px] mx-auto px-6 sm:px-10 pt-20 sm:pt-28 pb-16 sm:pb-24">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: EASE }}
+            className="p-rule pt-6 mb-14 grid grid-cols-1 md:grid-cols-12 gap-6 items-end"
+          >
+            <div className="md:col-span-4">
+              <span className="p-tick text-vermilion">Section One</span>
+              <p className="p-tick text-ink-soft mt-3">The Hand</p>
+            </div>
+            <h2 className="md:col-span-8 p-display text-[clamp(2.2rem,4.6vw,3.6rem)]">
+              Four games,
+              <br />
+              four disciplines.
+            </h2>
+          </motion.div>
+
+          <div className="p-hand grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-5">
+            {GAMES.map((game, i) => (
+              <GameCard key={game.id} game={game} index={i} />
+            ))}
+          </div>
+        </section>
+
+        {/* ━━━ HOUSE RULES ━━━ */}
+        <section className="max-w-[1180px] mx-auto px-6 sm:px-10 py-16 sm:py-24">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: EASE }}
+            className="p-rule pt-6 mb-14 grid grid-cols-1 md:grid-cols-12 gap-6 items-end"
+          >
+            <div className="md:col-span-4">
+              <span className="p-tick text-vermilion">Section Two</span>
+              <p className="p-tick text-ink-soft mt-3">House Rules</p>
+            </div>
+            <h2 className="md:col-span-8 p-display text-[clamp(2.2rem,4.6vw,3.6rem)]">
+              What the house
+              <br />
+              provides.
+            </h2>
+          </motion.div>
+
+          <div className="p-rules-row grid grid-cols-1 md:grid-cols-3">
+            {HOUSE_RULES.map((rule, i) => {
+              const Icon = rule.icon;
+              return (
+                <motion.div
+                  key={rule.numeral}
+                  initial={{ opacity: 0, y: 28 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-60px" }}
+                  transition={{ duration: 0.7, delay: i * 0.12, ease: EASE }}
+                  className="p-rule-item group"
+                >
+                  <div className="flex items-baseline justify-between mb-7">
+                    <span className="p-numeral">{rule.numeral}</span>
+                    <Icon
+                      className="w-6 h-6 text-ink-soft group-hover:text-vermilion transition-colors duration-500"
+                      strokeWidth={1.25}
+                    />
+                  </div>
+                  <span className="p-tick text-vermilion">{rule.kicker}</span>
+                  <h3 className="p-display text-[1.65rem] mt-4 mb-4">{rule.title}</h3>
+                  <p className="text-[0.9rem] leading-[1.75] text-ink-soft max-w-[24rem]">{rule.body}</p>
+                </motion.div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ━━━ THE TABLE (CTA) ━━━ */}
+        <section className="max-w-[1180px] mx-auto px-6 sm:px-10 pb-20 sm:pb-28">
+          <motion.div
+            initial={{ opacity: 0, y: 32 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, ease: EASE }}
+            className="p-felt rounded-sm px-8 sm:px-16 py-16 sm:py-24 text-center"
+          >
+            <div className="relative z-10 flex flex-col items-center">
+              <div className="p-suits flex items-center gap-4 mb-9 text-[1.35rem]" aria-hidden="true">
+                <span className="text-paper/70">♠</span>
+                <span className="text-vermilion">♥</span>
+                <span className="text-vermilion">♦</span>
+                <span className="text-paper/70">♣</span>
+              </div>
+
+              <h2 className="p-display text-[clamp(2.4rem,6vw,4.75rem)] mb-7">
+                The table is set.
+                <br />
+                Take a seat.
+              </h2>
+
+              <p className="text-paper/65 text-[1.0625rem] leading-[1.7] max-w-[38ch] mb-11">
+                No account, no setup, no waiting. Pick a game and the first hand is dealt in seconds.
+              </p>
+
+              <div className="flex flex-wrap items-center justify-center gap-x-9 gap-y-5">
+                <Link to="/lobby/card-flip" className="p-btn p-btn-cream">
+                  Play a hand
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+                <Link
+                  to="/register"
+                  className="p-link text-paper/80 hover:text-paper"
+                  style={{ backgroundImage: "linear-gradient(#f2ece1, #f2ece1)" }}
+                >
+                  Keep your scores
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+      </div>
     </div>
   );
 }

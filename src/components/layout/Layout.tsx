@@ -1,10 +1,17 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import Navbar from "./Navbar";
 
 export default function Layout() {
+  const { pathname } = useLocation();
+  // The Home page runs the light "Memory Parlour" theme; the nav and footer
+  // follow it so the page chrome doesn't clash with the paper background.
+  const paper = pathname === "/";
+
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden">
-      <div className="app-background" aria-hidden="true" />
+    <div
+      className={`min-h-screen flex flex-col relative overflow-hidden ${paper ? "theme-paper" : ""}`}
+    >
+      {!paper && <div className="app-background" aria-hidden="true" />}
       <Navbar />
       <main className="flex-1 relative z-10">
         <Outlet />

@@ -1,4 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..800&family=Archivo:ital,wght@0,300..700;1,400..600&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -14,6 +15,19 @@
   --color-highlight: #6ee7ff;
   --font-sans: "Space Grotesk", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── The Memory Parlour (paper/letterpress theme) ── */
+  --color-paper: #f2ece1;
+  --color-paper-2: #e7ddcb;
+  --color-parchment: #fbf8f2;
+  --color-ink-deep: #17130e;
+  --color-ink-soft: #5b5145;
+  --color-vermilion: #c1361f;
+  --color-felt: #1d3f31;
+  --color-brass: #a9822f;
+  --font-display: "Bodoni Moda", "Bodoni MT", Didot, Georgia, serif;
+  --font-body: "Archivo", "Helvetica Neue", Helvetica, sans-serif;
+  --font-tick: "Courier Prime", "Courier New", monospace;
 }
 
 html, body, #root {
@@ -492,4 +506,458 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #2a396b;
   border-radius: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   THE MEMORY PARLOUR
+   Letterpress / broadsheet theme used by the Home page.
+   Unlayered on purpose so it outranks the dark @layer components set.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.theme-paper {
+  background-color: var(--color-paper);
+  color: var(--color-ink-deep);
+}
+
+/* ── Chrome: navbar + footer adapt to paper ── */
+.theme-paper .surface-nav {
+  background-color: rgba(242, 236, 225, 0.86);
+  border-bottom: 1px solid rgba(23, 19, 14, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.theme-paper .surface-nav .logo-mark {
+  background: var(--color-ink-deep);
+  color: var(--color-paper);
+  border-radius: 3px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 3px 3px 0 rgba(193, 54, 31, 0.9);
+}
+
+.theme-paper .surface-nav .text-white { color: var(--color-ink-deep); }
+.theme-paper .surface-nav .text-accent { color: var(--color-vermilion); }
+.theme-paper .surface-nav .text-text-muted { color: var(--color-ink-soft); }
+.theme-paper .surface-nav a,
+.theme-paper .surface-nav button { font-family: var(--font-body); }
+.theme-paper .surface-nav a:hover,
+.theme-paper .surface-nav a:hover .text-white { color: var(--color-ink-deep); }
+
+.theme-paper .surface-nav .btn-primary {
+  background-color: var(--color-ink-deep);
+  color: var(--color-paper);
+  border-radius: 3px;
+  box-shadow: 3px 3px 0 var(--color-vermilion);
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+}
+
+.theme-paper .surface-nav .btn-primary:hover {
+  background-color: var(--color-vermilion);
+  box-shadow: 1px 1px 0 var(--color-ink-deep);
+  transform: translate(2px, 2px);
+}
+
+.theme-paper .surface-nav .btn-ghost {
+  background-color: transparent;
+  border: 1px solid rgba(23, 19, 14, 0.28);
+  color: var(--color-ink-soft);
+  border-radius: 3px;
+}
+
+.theme-paper .surface-nav .btn-ghost:hover {
+  border-color: var(--color-ink-deep);
+  color: var(--color-ink-deep);
+}
+
+.theme-paper > footer {
+  background-color: var(--color-ink-deep);
+  border-top: none;
+  color: rgba(242, 236, 225, 0.62);
+  font-family: var(--font-tick);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 1.75rem 1rem;
+}
+
+.theme-paper > footer a { color: var(--color-brass); }
+.theme-paper > footer a:hover { color: var(--color-paper); }
+
+/* ── Page shell ── */
+.parlour {
+  position: relative;
+  font-family: var(--font-body);
+  color: var(--color-ink-deep);
+  background-color: var(--color-paper);
+  overflow-x: clip;
+}
+
+.parlour ::selection {
+  background: var(--color-vermilion);
+  color: var(--color-paper);
+}
+
+/* Fixed paper texture: fibre grain over a warm vignette */
+.parlour-paper {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--color-paper);
+  background-image:
+    radial-gradient(120% 90% at 50% -20%, rgba(251, 248, 242, 0.9), transparent 60%),
+    radial-gradient(100% 80% at 100% 110%, rgba(169, 130, 47, 0.1), transparent 65%);
+}
+
+.parlour-paper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 300'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.32'/%3E%3C/svg%3E");
+}
+
+/* ── Typographic primitives ── */
+.p-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 0.94;
+  letter-spacing: -0.015em;
+  font-variation-settings: "opsz" 88;
+}
+
+.p-tick {
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
+.p-lede {
+  font-size: 1.0625rem;
+  line-height: 1.72;
+  color: var(--color-ink-soft);
+}
+
+.p-rule { border-top: 1px solid rgba(23, 19, 14, 0.2); }
+.p-rule-double { border-top: 3px double rgba(23, 19, 14, 0.32); }
+.p-hair-v { border-left: 1px solid rgba(23, 19, 14, 0.16); }
+
+/* Oversized outlined numeral for the House Rules section */
+.p-numeral {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(3.5rem, 7vw, 5.5rem);
+  line-height: 0.8;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(23, 19, 14, 0.4);
+  transition: color 500ms ease, -webkit-text-stroke-color 500ms ease;
+}
+
+.p-rule-item:hover .p-numeral {
+  color: var(--color-vermilion);
+  -webkit-text-stroke-color: var(--color-vermilion);
+}
+
+/* House Rules row: a rule across the top, hairlines between on desktop */
+.p-rules-row { border-top: 1px solid rgba(23, 19, 14, 0.2); }
+
+.p-rule-item { padding-top: 2rem; padding-bottom: 2rem; }
+
+.p-rule-item + .p-rule-item { border-top: 1px solid rgba(23, 19, 14, 0.14); }
+
+@media (min-width: 768px) {
+  .p-rule-item { padding-bottom: 0; }
+  .p-rule-item + .p-rule-item {
+    border-top: 0;
+    border-left: 1px solid rgba(23, 19, 14, 0.16);
+    padding-left: 2.25rem;
+  }
+  .p-rule-item:not(:last-child) { padding-right: 2.25rem; }
+}
+
+/* Suit glyphs: force text presentation so they render in the serif, not as emoji */
+.p-suits {
+  font-family: var(--font-display);
+  font-variant-emoji: text;
+}
+
+.p-halftone {
+  background-image: radial-gradient(currentColor 1.1px, transparent 1.2px);
+  background-size: 8px 8px;
+}
+
+/* ── Letterpress buttons ── */
+.p-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  padding: 1.05rem 1.9rem;
+  border-radius: 2px;
+  border: 1px solid var(--color-ink-deep);
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 200ms ease, color 200ms ease;
+}
+
+.p-btn-solid {
+  background: var(--color-ink-deep);
+  color: var(--color-paper);
+  box-shadow: 6px 6px 0 var(--color-vermilion);
+}
+
+.p-btn-solid:hover {
+  transform: translate(4px, 4px);
+  box-shadow: 2px 2px 0 var(--color-vermilion);
+}
+
+.p-btn-cream {
+  background: var(--color-paper);
+  color: var(--color-ink-deep);
+  border-color: var(--color-paper);
+  box-shadow: 6px 6px 0 rgba(193, 54, 31, 0.95);
+}
+
+.p-btn-cream:hover {
+  transform: translate(4px, 4px);
+  box-shadow: 2px 2px 0 rgba(193, 54, 31, 0.95);
+}
+
+/* Text link that thickens its rule on hover */
+.p-link {
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.35rem;
+  background-image: linear-gradient(var(--color-vermilion), var(--color-vermilion));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 100% 1px;
+  transition: color 200ms ease, background-size 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.p-link:hover {
+  color: var(--color-vermilion);
+  background-size: 100% 2px;
+}
+
+/* ── Playing cards ── */
+.p-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-parchment);
+  border: 1px solid rgba(23, 19, 14, 0.72);
+  border-radius: 12px;
+  box-shadow: 7px 9px 0 rgba(23, 19, 14, 0.08);
+  overflow: hidden;
+  transition: transform 520ms cubic-bezier(0.2, 0.9, 0.2, 1), box-shadow 520ms cubic-bezier(0.2, 0.9, 0.2, 1),
+    border-color 320ms ease;
+}
+
+/* Inner hairline frame, as printed on a real card */
+.p-card::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(23, 19, 14, 0.16);
+  border-radius: 6px;
+  pointer-events: none;
+  transition: border-color 320ms ease;
+}
+
+.p-card:hover {
+  transform: translateY(-14px) rotate(0deg);
+  box-shadow: 12px 18px 0 rgba(23, 19, 14, 0.13);
+  border-color: var(--color-ink-deep);
+}
+
+.p-card:hover::before { border-color: rgba(193, 54, 31, 0.5); }
+
+/* The four game cards sit as a lightly fanned hand */
+.p-hand > *:nth-child(1) .p-card { transform: rotate(-2.4deg); }
+.p-hand > *:nth-child(2) .p-card { transform: rotate(-0.8deg) translateY(6px); }
+.p-hand > *:nth-child(3) .p-card { transform: rotate(0.9deg); }
+.p-hand > *:nth-child(4) .p-card { transform: rotate(2.6deg) translateY(6px); }
+.p-hand > * .p-card:hover { transform: translateY(-14px) rotate(0deg); }
+
+.p-pip {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 0.86;
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+.p-pip-red { color: var(--color-vermilion); }
+.p-pip-black { color: var(--color-ink-deep); }
+
+/* Double-ruled medallion holding each game's mark */
+.p-medallion {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(23, 19, 14, 0.5);
+  transition: transform 520ms cubic-bezier(0.2, 0.9, 0.2, 1), background-color 400ms ease;
+}
+
+.p-medallion::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  border: 1px solid rgba(23, 19, 14, 0.22);
+  transition: border-color 400ms ease;
+}
+
+.p-card:hover .p-medallion {
+  transform: scale(1.07) rotate(-6deg);
+  background-color: rgba(193, 54, 31, 0.07);
+}
+
+.p-card:hover .p-medallion::after { border-color: rgba(193, 54, 31, 0.45); }
+
+.p-tag {
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.58rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(23, 19, 14, 0.24);
+  border-radius: 2px;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+}
+
+/* ── Hero deck: three fanned cards, one turned face up at a time ── */
+.p-deck { perspective: 1600px; }
+
+.p-deck-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 19, 14, 0.75);
+  box-shadow: 10px 14px 26px rgba(23, 19, 14, 0.18);
+  overflow: hidden;
+}
+
+.p-deck-back {
+  background-color: #c1361f;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(251, 248, 242, 0.5) 0 1.5px, transparent 1.5px 9px),
+    repeating-linear-gradient(-45deg, rgba(251, 248, 242, 0.5) 0 1.5px, transparent 1.5px 9px);
+}
+
+.p-deck-back::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border: 1px solid rgba(251, 248, 242, 0.75);
+  border-radius: 8px;
+}
+
+.p-deck-front {
+  transform: rotateY(180deg);
+  background: var(--color-parchment);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.p-deck-front::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border: 1px solid rgba(23, 19, 14, 0.18);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+/* ── Marquee band ── */
+.p-marquee {
+  display: flex;
+  width: max-content;
+  animation: parlour-marquee 34s linear infinite;
+}
+
+.p-marquee-seg {
+  display: flex;
+  align-items: center;
+  gap: 2.75rem;
+  padding-right: 2.75rem;
+  white-space: nowrap;
+}
+
+@keyframes parlour-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ── Felt table panel ── */
+.p-felt {
+  position: relative;
+  background-color: var(--color-felt);
+  color: var(--color-paper);
+  overflow: hidden;
+}
+
+.p-felt::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(251, 248, 242, 0.16) 1px, transparent 1.2px),
+    radial-gradient(120% 100% at 50% 0%, rgba(169, 130, 47, 0.22), transparent 70%);
+  background-size: 14px 14px, 100% 100%;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.p-felt::after {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border: 1px solid rgba(242, 236, 225, 0.24);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Drop cap on the hero lede */
+.p-dropcap::first-letter {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 3.65rem;
+  line-height: 0.78;
+  float: left;
+  padding: 0.16rem 0.6rem 0 0;
+  color: var(--color-vermilion);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-marquee { animation: none; }
+  .p-card,
+  .p-medallion { transition-duration: 1ms; }
 }
