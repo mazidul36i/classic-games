@@ -970,21 +970,106 @@ body {
   content: "";
   position: absolute;
   inset: 0;
+  /* Woven baize: two opposing hatches over a warm lamp-glow from above */
   background-image:
-    radial-gradient(rgba(251, 248, 242, 0.16) 1px, transparent 1.2px),
-    radial-gradient(120% 100% at 50% 0%, rgba(169, 130, 47, 0.22), transparent 70%);
-  background-size: 14px 14px, 100% 100%;
-  opacity: 0.85;
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.07) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(251, 248, 242, 0.04) 0 2px, transparent 2px 4px),
+    radial-gradient(120% 95% at 50% -10%, rgba(169, 130, 47, 0.26), transparent 68%);
+  opacity: 0.9;
   pointer-events: none;
 }
 
+/* Double rail, like the edge of a card table */
 .p-felt::after {
   content: "";
   position: absolute;
-  inset: 18px;
-  border: 1px solid rgba(242, 236, 225, 0.24);
-  border-radius: 4px;
+  inset: 16px;
+  border: 1px solid rgba(242, 236, 225, 0.2);
+  outline: 1px solid rgba(169, 130, 47, 0.38);
+  outline-offset: 5px;
+  border-radius: 3px;
   pointer-events: none;
+}
+
+/* ── Admission ticket resting on the baize ── */
+.p-ticket {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--stub, 4.75rem);
+  width: 100%;
+  max-width: 47rem;
+  background: var(--color-parchment);
+  border-radius: 7px;
+  transform: rotate(-1.1deg);
+  box-shadow:
+    0 28px 60px -20px rgba(0, 0, 0, 0.6),
+    0 3px 0 rgba(0, 0, 0, 0.14);
+}
+
+.p-ticket-main { padding: 2.5rem 2.25rem 2.25rem; }
+
+.p-ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.9rem;
+  margin-bottom: 1.75rem;
+  border-bottom: 1px solid rgba(23, 19, 14, 0.18);
+  color: var(--color-ink-soft);
+}
+
+.p-ticket-stub {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  border-left: 2px dashed rgba(23, 19, 14, 0.3);
+  color: var(--color-ink-soft);
+}
+
+.p-ticket-stub-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+}
+
+/* Punched holes at each end of the perforation, filled with the felt behind */
+.p-ticket-notch {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-felt);
+  right: calc(var(--stub, 4.75rem) - 10px);
+  pointer-events: none;
+}
+
+.p-ticket-notch-top { top: -10px; }
+.p-ticket-notch-bottom { bottom: -10px; }
+
+@media (max-width: 640px) {
+  .p-ticket {
+    grid-template-columns: 1fr;
+    transform: rotate(-0.6deg);
+  }
+  .p-ticket-main { padding: 1.9rem 1.5rem 1.75rem; }
+  .p-ticket-stub {
+    flex-direction: row;
+    gap: 0.9rem;
+    padding: 0.9rem;
+    border-left: 0;
+    border-top: 2px dashed rgba(23, 19, 14, 0.3);
+  }
+  .p-ticket-stub-text { writing-mode: horizontal-tb; }
+  .p-ticket-notch { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-ticket { transform: none; }
 }
 
 /* Drop cap on the hero lede */

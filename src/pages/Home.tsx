@@ -456,39 +456,54 @@ export default function Home() {
             whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8, ease: EASE }}
-            className="p-felt rounded-sm px-8 sm:px-16 py-16 sm:py-24 text-center"
+            className="p-felt rounded-sm px-5 sm:px-14 py-14 sm:py-20"
           >
-            <div className="relative z-10 flex flex-col items-center">
-              <div className="p-suits flex items-center gap-4 mb-9 text-[1.35rem]" aria-hidden="true">
-                <span className="text-paper/70">♠</span>
-                <span className="text-vermilion">♥</span>
-                <span className="text-vermilion">♦</span>
-                <span className="text-paper/70">♣</span>
-              </div>
+            {/* The CTA is an admission ticket lying on the baize, so the
+                closing panel carries an object like every other section. */}
+            <div className="relative z-10 flex justify-center">
+              <div className="p-ticket">
+                <div className="p-ticket-main">
+                  <div className="p-ticket-head">
+                    <span className="p-tick">Admit one</span>
+                    <span className="p-suits flex items-center gap-2 text-[1.05rem]" aria-hidden="true">
+                      <span className="text-ink-deep">♠</span>
+                      <span className="text-vermilion">♥</span>
+                      <span className="text-vermilion">♦</span>
+                      <span className="text-ink-deep">♣</span>
+                    </span>
+                    <span className="p-tick">No. 00001</span>
+                  </div>
 
-              <h2 className="p-display text-[clamp(2rem,4.4vw,3.5rem)] mb-7 leading-[1.1]">
-                The table is set.
-                <br />
-                Take a seat.
-              </h2>
+                  <h2 className="p-display text-ink-deep text-[clamp(1.9rem,4vw,3.05rem)] leading-[1.08] mb-5">
+                    The table is set.
+                    <br />
+                    Take a seat.
+                  </h2>
 
-              <p className="text-paper/75 text-[1.0625rem] leading-[1.7] max-w-[42ch] mb-11">
-                No account, no setup, no waiting. Pick a game and the first hand is dealt in seconds.
-              </p>
+                  <p className="text-[1rem] leading-[1.7] text-ink-soft max-w-[40ch] mb-9">
+                    No account, no setup, no waiting. Pick a game and the first hand is
+                    dealt in seconds.
+                  </p>
 
-              <div className="flex flex-wrap items-center justify-center gap-x-9 gap-y-5">
-                <Link to="/lobby/card-flip" className="p-btn p-btn-cream">
-                  Play a hand
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-                <Link
-                  to="/register"
-                  className="p-link text-paper/80 hover:text-paper"
-                  style={{ backgroundImage: "linear-gradient(#f2ece1, #f2ece1)" }}
-                >
-                  Keep your scores
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </Link>
+                  <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
+                    <Link to="/lobby/card-flip" className="p-btn p-btn-solid">
+                      Play a hand
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                    <Link to="/register" className="p-link text-ink-deep">
+                      Keep your scores
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="p-ticket-stub" aria-hidden="true">
+                  <span className="p-engrave text-vermilion text-xl">♠</span>
+                  <span className="p-ticket-stub-text p-tick">Memory Parlour</span>
+                </div>
+
+                <span className="p-ticket-notch p-ticket-notch-top" aria-hidden="true" />
+                <span className="p-ticket-notch p-ticket-notch-bottom" aria-hidden="true" />
               </div>
             </div>
           </motion.div>
