@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Users, KeyRound } from "lucide-react";
 import PageHead from "../components/layout/PageHead";
@@ -38,6 +38,7 @@ const DIFFICULTY_NOTE: Record<Difficulty, string> = {
 
 export default function GameLobby() {
   const navigate = useNavigate();
+  const location = useLocation();
   const reduce = useReducedMotion();
   const { user, isAuthenticated } = useAuth();
   const { gameType: rawGameType } = useParams<{ gameType: string }>();
@@ -71,6 +72,12 @@ export default function GameLobby() {
     joinedAt: Date.now(),
   });
 
+  /* Guests can set the table but not sit at it — send them to the door and
+     bring them back to whatever they were about to do. */
+  const sendToLogin = (destination: string) => {
+    navigate("/login", { state: { from: destination } });
+  };
+
   const handleGameTypeChange = (newType: GameType) => {
     navigate(`/lobby/${newType}?${searchParams.toString()}`, { replace: true });
   };
@@ -90,12 +97,17 @@ export default function GameLobby() {
   };
 
   const handleSinglePlay = () => {
-    navigate(`/play/${gameType}?difficulty=${difficulty}&theme=${theme}`);
+    const table = `/play/${gameType}?difficulty=${difficulty}&theme=${theme}`;
+    if (!isAuthenticated || !user) {
+      sendToLogin(table);
+      return;
+    }
+    navigate(table);
   };
 
   const handleCreateRoom = async () => {
     if (!isAuthenticated || !user) {
-      navigate("/login");
+      sendToLogin(location.pathname + location.search);
       return;
     }
     setCreating(true);
@@ -112,7 +124,7 @@ export default function GameLobby() {
 
   const handleJoinRoom = async () => {
     if (!isAuthenticated || !user) {
-      navigate("/login");
+      sendToLogin(location.pathname + location.search);
       return;
     }
     if (!roomCode.trim()) {
@@ -137,7 +149,7 @@ export default function GameLobby() {
 
   const handleQuickMatch = async () => {
     if (!isAuthenticated || !user) {
-      navigate("/login");
+      sendToLogin(location.pathname + location.search);
       return;
     }
     setMatching(true);
@@ -155,7 +167,8 @@ export default function GameLobby() {
   return (
     <div className="relative z-10 max-w-[1180px] mx-auto px-5 sm:px-10 pt-6 pb-20 sm:pb-28">
       <PageHead
-        section="The Table"
+        section="The Table"
+
         kicker="Before the deal"
         title={
           <>
@@ -259,8 +272,11 @@ export default function GameLobby() {
             <p className="text-[0.95rem] leading-[1.72] text-ink-soft mb-7">
               Beat your own time, then put the score on the board. No one waiting, no turns to keep.
             </p>
+            {!isAuthenticated && (
+              <div className="p-note mb-5">Sign in first — every hand is played under your name.</div>
+            )}
             <button onClick={handleSinglePlay} className="p-btn p-btn-solid p-btn-block">
-              Deal me in
+              {isAuthenticated ? "Deal me in" : "Sign in to play"}
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </section>

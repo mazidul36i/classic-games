@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import Layout from '../components/layout/Layout';
 import Home from '../pages/Home';
@@ -13,10 +13,16 @@ import PatternMemoryPage from '../pages/PatternMemoryPage';
 import WordMatchPage from '../pages/WordMatchPage';
 import MultiplayerRoom from '../pages/MultiplayerRoom';
 
+/* Guests may look around, but they cannot sit down: anything behind this
+   bounces to the door and comes straight back once they have signed in. */
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
   if (loading) return null;
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  if (isAuthenticated) return <>{children}</>;
+  return (
+    <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
+  );
 };
 
 export default function AppRoutes() {
@@ -38,10 +44,38 @@ export default function AppRoutes() {
           />
           <Route path="/lobby" element={<Navigate to="/lobby/card-flip" replace />} />
           <Route path="/lobby/:gameType" element={<GameLobby />} />
-          <Route path="/play/card-flip" element={<CardFlipPage />} />
-          <Route path="/play/number-sequence" element={<NumberSequencePage />} />
-          <Route path="/play/pattern-memory" element={<PatternMemoryPage />} />
-          <Route path="/play/word-match" element={<WordMatchPage />} />
+          <Route
+            path="/play/card-flip"
+            element={
+              <ProtectedRoute>
+                <CardFlipPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/play/number-sequence"
+            element={
+              <ProtectedRoute>
+                <NumberSequencePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/play/pattern-memory"
+            element={
+              <ProtectedRoute>
+                <PatternMemoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/play/word-match"
+            element={
+              <ProtectedRoute>
+                <WordMatchPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/room/:roomId"
             element={

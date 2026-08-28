@@ -280,14 +280,16 @@ export default function Home() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8 }}
             className="p-rule-double pt-3 flex items-center justify-between gap-4 text-ink-soft"
-          >
+          >
+
             <span className="p-engrave text-center flex-1 text-ink-deep text-[0.95rem] tracking-[0.14em] uppercase">
               The Memory Parlour
               <span className="hidden xs:inline">
                 <span className="text-vermilion mx-2">✦</span>
                 A House of Four Diversions
               </span>
-            </span>
+            </span>
+
           </motion.div>
           <div className="p-rule mt-3" />
         </div>
@@ -477,8 +479,8 @@ export default function Home() {
                   </h2>
 
                   <p className="text-[1rem] leading-[1.7] text-ink-soft max-w-[40ch] mb-9">
-                    No account, no setup, no waiting. Pick a game and the first hand is
-                    dealt in seconds.
+                    A name at the door and you're in. Pick a game, and the first hand is
+                    dealt in seconds — every score kept under that name.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
@@ -487,7 +489,7 @@ export default function Home() {
                       <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                     <Link to="/register" className="p-link text-ink-deep">
-                      Keep your scores
+                      Join the house
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </Link>
                   </div>

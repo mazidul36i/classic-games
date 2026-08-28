@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { loginWithEmail, loginWithGoogle } from "../firebase/auth";
@@ -8,7 +8,10 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const reduce = useReducedMotion();
+  /* Where the guard turned them away from, so we can send them back. */
+  const from = (location.state as { from?: string } | null)?.from;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +23,7 @@ export default function Login() {
     setLoading(true);
     try {
       await loginWithEmail(email, password);
-      navigate("/");
+      navigate(from || "/", { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -33,7 +36,7 @@ export default function Login() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      navigate("/");
+      navigate(from || "/", { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Google login failed");
     } finally {
@@ -63,6 +66,12 @@ export default function Login() {
             <br />
             the table.
           </h1>
+          {from && (
+            <p className="text-[0.95rem] leading-[1.72] text-ink-soft mt-5 max-w-[34ch] mx-auto">
+              The house keeps every hand under a name — sign in and we'll take you
+              straight to your seat.
+            </p>
+          )}
         </div>
 
         <div className="p-panel px-6 sm:px-8 pt-7 pb-8">
@@ -135,7 +144,7 @@ export default function Login() {
         </div>
 
         <p className="text-center mt-8">
-          <Link to="/register" className="p-link text-ink-deep">
+          <Link to="/register" state={from ? { from } : undefined} className="p-link text-ink-deep">
             Not a member yet
             <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>

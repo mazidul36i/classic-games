@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { registerWithEmail, loginWithGoogle } from "../firebase/auth";
@@ -8,7 +8,10 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 export default function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
   const reduce = useReducedMotion();
+  /* Passed along from the sign-in door, so joining lands on the same seat. */
+  const from = (location.state as { from?: string } | null)?.from;
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +28,7 @@ export default function Register() {
     setLoading(true);
     try {
       await registerWithEmail(email, password, displayName);
-      navigate("/");
+      navigate(from || "/", { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -38,7 +41,7 @@ export default function Register() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      navigate("/");
+      navigate(from || "/", { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
@@ -159,7 +162,7 @@ export default function Register() {
         </div>
 
         <p className="text-center mt-8">
-          <Link to="/login" className="p-link text-ink-deep">
+          <Link to="/login" state={from ? { from } : undefined} className="p-link text-ink-deep">
             Already have a seat
             <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
