@@ -1,31 +1,44 @@
 import { useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, Users, KeyRound } from "lucide-react";
+import PageHead from "../components/layout/PageHead";
 import { useAuth } from "../hooks/useAuth";
 import { createRoom, joinRoom, quickMatch } from "../firebase/realtime";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 import type { RoomPlayer } from "../types/multiplayer.types";
-import { ChevronLeft } from "lucide-react";
 
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+/* The four games keep the card identities the front page gave them. */
 const GAME_OPTIONS: {
   id: GameType;
   label: string;
-  badge: string;
+  rank: string;
+  suit: string;
+  red: boolean;
   supportsMulti: boolean;
   supportDifficulty: boolean;
 }[] = [
-    { id: "card-flip", label: "Card Flip Match", badge: "CF", supportsMulti: true, supportDifficulty: true },
-    { id: "number-sequence", label: "Number Sequence", badge: "NS", supportsMulti: false, supportDifficulty: false },
-    { id: "pattern-memory", label: "Pattern Memory", badge: "PM", supportsMulti: false, supportDifficulty: true },
-    { id: "word-match", label: "Word Match", badge: "WM", supportsMulti: true, supportDifficulty: true },
-  ];
+  { id: "card-flip", label: "Card Flip", rank: "A", suit: "♠", red: false, supportsMulti: true, supportDifficulty: true },
+  { id: "number-sequence", label: "Sequence", rank: "K", suit: "♦", red: true, supportsMulti: false, supportDifficulty: false },
+  { id: "pattern-memory", label: "Pattern", rank: "Q", suit: "♣", red: false, supportsMulti: false, supportDifficulty: true },
+  { id: "word-match", label: "Word Match", rank: "J", suit: "♥", red: true, supportsMulti: true, supportDifficulty: true },
+];
 
 const DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
 const THEMES: CardTheme[] = ["colors", "emojis", "numbers", "animals", "symbols"];
 const VALID_GAME_TYPES: GameType[] = ["card-flip", "number-sequence", "pattern-memory", "word-match"];
 
+const DIFFICULTY_NOTE: Record<Difficulty, string> = {
+  "4x4": "Eight pairs — a short hand.",
+  "6x6": "Eighteen pairs — the standard game.",
+  "8x8": "Thirty-two pairs — the long night.",
+};
+
 export default function GameLobby() {
   const navigate = useNavigate();
+  const reduce = useReducedMotion();
   const { user, isAuthenticated } = useAuth();
   const { gameType: rawGameType } = useParams<{ gameType: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -46,6 +59,17 @@ export default function GameLobby() {
   const [error, setError] = useState("");
 
   const selectedGame = GAME_OPTIONS.find((g) => g.id === gameType)!;
+  const busy = creating || joining || matching;
+
+  const asPlayer = (): RoomPlayer => ({
+    uid: user!.uid,
+    displayName: user!.displayName || "Player",
+    photoURL: user!.photoURL || "",
+    score: 0,
+    isReady: false,
+    isCurrentTurn: false,
+    joinedAt: Date.now(),
+  });
 
   const handleGameTypeChange = (newType: GameType) => {
     navigate(`/lobby/${newType}?${searchParams.toString()}`, { replace: true });
@@ -77,19 +101,10 @@ export default function GameLobby() {
     setCreating(true);
     setError("");
     try {
-      const hostPlayer: RoomPlayer = {
-        uid: user.uid,
-        displayName: user.displayName || "Player",
-        photoURL: user.photoURL || "",
-        score: 0,
-        isReady: false,
-        isCurrentTurn: false,
-        joinedAt: Date.now(),
-      };
-      const roomId = await createRoom(hostPlayer, gameType, difficulty, theme);
+      const roomId = await createRoom(asPlayer(), gameType, difficulty, theme);
       navigate(`/room/${roomId}`);
     } catch {
-      setError("Failed to create room. Try again.");
+      setError("Failed to open a room. Try again.");
     } finally {
       setCreating(false);
     }
@@ -107,23 +122,14 @@ export default function GameLobby() {
     setJoining(true);
     setError("");
     try {
-      const player: RoomPlayer = {
-        uid: user.uid,
-        displayName: user.displayName || "Player",
-        photoURL: user.photoURL || "",
-        score: 0,
-        isReady: false,
-        isCurrentTurn: false,
-        joinedAt: Date.now(),
-      };
-      const ok = await joinRoom(roomCode.toUpperCase(), player);
+      const ok = await joinRoom(roomCode.toUpperCase(), asPlayer());
       if (ok) {
         navigate(`/room/${roomCode.toUpperCase()}`);
       } else {
-        setError("Room not found or is full/in progress.");
+        setError("That room is closed, full, or already in play.");
       }
     } catch {
-      setError("Failed to join room. Please try again.");
+      setError("Failed to join the room. Please try again.");
     } finally {
       setJoining(false);
     }
@@ -137,179 +143,202 @@ export default function GameLobby() {
     setMatching(true);
     setError("");
     try {
-      const player: RoomPlayer = {
-        uid: user.uid,
-        displayName: user.displayName || "Player",
-        photoURL: user.photoURL || "",
-        score: 0,
-        isReady: false,
-        isCurrentTurn: false,
-        joinedAt: Date.now(),
-      };
-      const roomId = await quickMatch(player, gameType, difficulty, theme);
+      const roomId = await quickMatch(asPlayer(), gameType, difficulty, theme);
       navigate(`/room/${roomId}`);
     } catch {
-      setError("Failed to find a match. Please try again.");
+      setError("Nobody at the table just now. Please try again.");
     } finally {
       setMatching(false);
     }
   };
 
-  const difficultyLabel =
-    difficulty === "4x4" ? "8 pairs - Easy" : difficulty === "6x6" ? "18 pairs - Medium" : "32 pairs - Hard";
-
   return (
-    <div className="max-w-4xl mx-auto px-4 md:pt-7 lg:py-10 pb-10">
+    <div className="relative z-10 max-w-[1180px] mx-auto px-5 sm:px-10 pt-6 pb-20 sm:pb-28">
+      <PageHead
+        section="The Table"
+        kicker="Before the deal"
+        title={
+          <>
+            Set the table,
+            <br />
+            then play.
+          </>
+        }
+        lede="Pick a game, choose how long a hand you want, and take a seat — on your own or with someone across from you."
+      />
+
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={reduce ? false : { opacity: 0, y: 26 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        transition={{ duration: 0.75, delay: 0.12, ease: EASE }}
+        className="grid lg:grid-cols-12 gap-7 lg:gap-8 mt-14 sm:mt-16 items-start"
       >
-        <div className="flex items-center mb-2 gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
-          >
-            <ChevronLeft className="text-xl font-bold text-white mr-1" />
-          </button>
-          <h1 className="text-3xl font-bold text-white">Game Lobby</h1>
-        </div>
-        <p className="text-text-muted mb-8">Configure your game and start playing</p>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="space-y-6">
-            <div className="surface p-5">
-              <h2
-                className="text-xs font-semibold text-text-muted uppercase tracking-[0.2em] mb-3">
-                Select Game
-              </h2>
-              <div className="grid grid-cols-2 gap-2">
-                {GAME_OPTIONS.map((game) => (
-                  <button
-                    key={game.id}
-                    onClick={() => handleGameTypeChange(game.id)}
-                    className={`option-btn flex items-center gap-2 p-1.5 sm:p-2 md:p-3 text-left ${gameType === game.id ? "option-btn-active" : ""
-                      }`}
-                  >
-                    <span className="logo-mark text-xs sm:text-sm aspect-square">{game.badge}</span>
-                    <span className="text-xs sm:text-sm font-medium">{game.label}</span>
-                  </button>
-                ))}
-              </div>
+        {/* ── The settings sheet ── */}
+        <div className="lg:col-span-7 space-y-7">
+          <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
+            <div className="p-panel-head">
+              <span className="p-tick">The game</span>
+              <span className="p-tick">Four on offer</span>
             </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {GAME_OPTIONS.map((game) => (
+                <button
+                  key={game.id}
+                  onClick={() => handleGameTypeChange(game.id)}
+                  aria-pressed={gameType === game.id}
+                  className={`p-opt p-opt-card ${gameType === game.id ? "p-opt-on" : ""}`}
+                >
+                  <span
+                    className={`p-opt-rank ${
+                      gameType === game.id ? "" : game.red ? "text-vermilion" : "text-ink-deep"
+                    }`}
+                  >
+                    {game.rank}
+                    {game.suit}
+                  </span>
+                  <span>{game.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
 
-            {selectedGame.supportDifficulty && <div className="surface p-5">
-              <h2
-                className="text-xs font-semibold text-text-muted uppercase tracking-[0.2em] mb-3">
-                Difficulty
-              </h2>
-              <div className="flex gap-2">
+          {selectedGame.supportDifficulty && (
+            <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
+              <div className="p-panel-head">
+                <span className="p-tick">Length of hand</span>
+              </div>
+              <div className="flex gap-2.5">
                 {DIFFICULTIES.map((d) => (
                   <button
                     key={d}
                     onClick={() => handleDifficultyChange(d)}
-                    className={`option-btn flex-1 py-2 text-sm font-medium ${d === "8x8" ? "hidden md:inline" : ""}
-                       ${difficulty === d ? "option-btn-active" : ""}`}
+                    aria-pressed={difficulty === d}
+                    className={`p-opt flex-1 ${d === "8x8" ? "p-opt-wide" : ""} ${
+                      difficulty === d ? "p-opt-on" : ""
+                    }`}
                   >
-                    {d}
+                    {d.replace("x", "×")}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-text-muted mt-2">{difficultyLabel}</p>
-            </div>
-            }
-            {(gameType === "card-flip" || gameType === "word-match") && (
-              <div className="surface p-5">
-                <h2
-                  className="text-xs font-semibold text-text-muted uppercase tracking-[0.2em] mb-3">
-                  Card Theme
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {THEMES.map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => handleThemeChange(t)}
-                      className={`option-btn px-3 py-1.5 text-sm font-medium capitalize ${theme === t ? "option-btn-active" : ""
-                        }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div className="surface p-5">
-              <h2
-                className="text-xs font-semibold text-text-muted uppercase tracking-[0.2em] mb-4">
-                Single Player
-              </h2>
-              <p className="text-text-muted text-sm mb-4">
-                Play alone, beat your time and score, and climb the leaderboard.
+              <p className="text-[0.92rem] leading-[1.7] text-ink-soft mt-4">
+                {DIFFICULTY_NOTE[difficulty]}
               </p>
-              <button
-                onClick={handleSinglePlay}
-                className="btn btn-primary w-full py-3"
-              >
-                Play Solo
-              </button>
-            </div>
+            </section>
+          )}
 
-            {selectedGame.supportsMulti && (
-              <div className="surface p-5">
-                <h2
-                  className="text-xs font-semibold text-text-muted uppercase tracking-[0.2em] mb-4">
-                  Multiplayer
+          {(gameType === "card-flip" || gameType === "word-match") && (
+            <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
+              <div className="p-panel-head">
+                <span className="p-tick">The deck</span>
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                {THEMES.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => handleThemeChange(t)}
+                    aria-pressed={theme === t}
+                    className={`p-opt ${theme === t ? "p-opt-on" : ""}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+
+        {/* ── Taking a seat ── */}
+        <div className="lg:col-span-5 space-y-7 lg:sticky lg:top-24">
+          <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
+            <div className="p-panel-head">
+              <span className="p-tick">Alone</span>
+              <span className="p-suits text-[0.95rem] text-ink-deep" aria-hidden="true">♠</span>
+            </div>
+            <h2 className="p-display text-[1.4rem] leading-snug mb-3">Play a solo hand</h2>
+            <p className="text-[0.95rem] leading-[1.72] text-ink-soft mb-7">
+              Beat your own time, then put the score on the board. No one waiting, no turns to keep.
+            </p>
+            <button onClick={handleSinglePlay} className="p-btn p-btn-solid p-btn-block">
+              Deal me in
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </section>
+
+          {selectedGame.supportsMulti && (
+            <section className="p-felt rounded-sm px-6 sm:px-8 pt-7 pb-8">
+              <div className="relative z-10">
+                <div className="p-panel-head">
+                  <span className="p-tick">Together</span>
+                  <span className="p-suits text-[0.95rem] text-vermilion" aria-hidden="true">♥</span>
+                </div>
+
+                <h2 className="p-display text-[1.4rem] leading-snug text-paper mb-3">
+                  Open a second seat
                 </h2>
+                <p className="text-[0.95rem] leading-[1.72] text-paper/75 mb-6">
+                  Draw a stranger, or send a code to someone you know. Every flip lands on both screens at once.
+                </p>
+
                 {!isAuthenticated && (
-                  <p className="text-amber-200 text-sm mb-3">
-                    Sign in required for multiplayer
-                  </p>
+                  <div className="p-note mb-5">Sign in first — rooms are kept under your name.</div>
                 )}
                 {error && (
-                  <p className="text-red-300 text-sm mb-3">{error}</p>
-                )}
-                <div className="space-y-3">
-                  <button
-                    onClick={handleQuickMatch}
-                    disabled={matching}
-                    className="btn btn-primary w-full py-3"
-                  >
-                    {matching ? "Matching..." : "Quick Match"}
-                  </button>
-                  <div className="pt-1">
-                    <p className="text-xs text-text-muted uppercase tracking-[0.16em] mb-2">Private Room</p>
+                  <div className="p-alert mb-5" role="alert">
+                    {error}
                   </div>
-                  <button
-                    onClick={handleCreateRoom}
-                    disabled={creating || matching || joining}
-                    className="btn btn-secondary w-full py-3"
-                  >
-                    {creating ? "Creating..." : "Create Room"}
-                  </button>
-                  <div className="flex gap-2">
+                )}
+
+                <button
+                  onClick={handleQuickMatch}
+                  disabled={busy}
+                  className="p-btn p-btn-cream p-btn-block"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  {matching ? "Looking…" : "Find an opponent"}
+                </button>
+
+                <div className="flex items-center gap-4 my-7">
+                  <span className="flex-1 p-rule" />
+                  <span className="p-tick">Private room</span>
+                  <span className="flex-1 p-rule" />
+                </div>
+
+                <button
+                  onClick={handleCreateRoom}
+                  disabled={busy}
+                  className="p-btn p-btn-outline p-btn-block"
+                >
+                  {creating ? "Opening…" : "Open a room"}
+                </button>
+
+                <div className="flex items-end gap-3 mt-6">
+                  <div className="flex-1">
+                    <label className="p-label" htmlFor="room-code">
+                      Have a code?
+                    </label>
                     <input
+                      id="room-code"
                       type="text"
                       value={roomCode}
                       onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                      placeholder="Room Code"
+                      placeholder="ABC123"
                       maxLength={6}
-                      className="input-field flex-1 uppercase mono text-sm"
+                      className="p-input p-code"
                     />
-                    <button
-                      onClick={handleJoinRoom}
-                      disabled={joining || creating || matching}
-                      className="btn btn-ghost px-4 py-2.5 text-sm"
-                    >
-                      {joining ? "..." : "Join"}
-                    </button>
                   </div>
+                  <button
+                    onClick={handleJoinRoom}
+                    disabled={busy}
+                    className="p-btn p-btn-cream shrink-0"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    {joining ? "…" : "Join"}
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
+            </section>
+          )}
         </div>
       </motion.div>
     </div>

@@ -1,140 +1,169 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { registerWithEmail, loginWithGoogle } from '../firebase/auth';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { registerWithEmail, loginWithGoogle } from "../firebase/auth";
+
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 export default function Register() {
   const navigate = useNavigate();
-  const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const reduce = useReducedMotion();
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError("Password must be at least 6 characters");
       return;
     }
-    setError('');
+    setError("");
     setLoading(true);
     try {
       await registerWithEmail(email, password, displayName);
-      navigate('/');
+      navigate("/");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
-    setError('');
+    setError("");
     setLoading(true);
     try {
       await loginWithGoogle();
-      navigate('/');
+      navigate("/");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Google sign-in failed');
+      setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+    <div className="relative z-10 max-w-[30rem] mx-auto px-5 sm:px-6 pt-6 pb-20">
       <motion.div
-        className="w-full max-w-md"
-        initial={{ opacity: 0, y: 20 }}
+        initial={reduce ? false : { opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        transition={{ duration: 0.8, ease: EASE }}
       >
-        <div className="surface p-8">
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center mb-4">
-              <span className="badge mono">NEW PLAYER</span>
-            </div>
-            <h1 className="text-2xl font-bold text-white">Create Account</h1>
-            <p className="text-[color:var(--color-text-muted)] mt-1">Join and start playing</p>
+        <div className="p-masthead">
+          <span className="p-engrave flex-1 text-center text-ink-deep text-[0.85rem] sm:text-[0.95rem] tracking-[0.14em] uppercase">
+            <span className="hidden sm:inline">The Memory Parlour</span>
+            <span className="text-vermilion mx-2 hidden sm:inline">✦</span>
+            New Member
+          </span>
+        </div>
+
+        <div className="text-center pt-10 pb-9">
+          <span className="p-tick text-vermilion">First visit</span>
+          <h1 className="p-display text-[clamp(2rem,7vw,2.9rem)] mt-4 leading-[1.06]">
+            Sign the
+            <br />
+            register.
+          </h1>
+        </div>
+
+        <div className="p-panel px-6 sm:px-8 pt-7 pb-8">
+          <div className="p-panel-head">
+            <span className="p-tick">Membership</span>
+            <span className="p-suits flex items-center gap-1.5 text-[0.95rem]" aria-hidden="true">
+              <span className="text-vermilion">♦</span>
+              <span className="text-ink-deep">♣</span>
+            </span>
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-900/30 border border-red-700/70 rounded-lg text-red-200 text-sm">
+            <div className="p-alert mb-6" role="alert">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-1.5">
-                Display Name
+          <form onSubmit={handleRegister}>
+            <div className="p-field">
+              <label className="p-label" htmlFor="reg-name">
+                Name at the table
               </label>
               <input
+                id="reg-name"
                 type="text"
+                autoComplete="nickname"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Your name"
                 required
-                className="input-field"
+                className="p-input"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-1.5">
+
+            <div className="p-field">
+              <label className="p-label" htmlFor="reg-email">
                 Email
               </label>
               <input
+                id="reg-email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
-                className="input-field"
+                className="p-input"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-1.5">
+
+            <div className="p-field">
+              <label className="p-label" htmlFor="reg-password">
                 Password
               </label>
               <input
+                id="reg-password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 6 characters"
+                placeholder="At least six characters"
                 required
-                className="input-field"
+                className="p-input"
               />
+              <p className="p-tick p-tick-plain text-ink-soft mt-2">
+                Six characters or more.
+              </p>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn btn-primary w-full py-3"
-            >
-              {loading ? 'Creating account...' : 'Create Account'}
+
+            <button type="submit" disabled={loading} className="p-btn p-btn-solid p-btn-block mt-9">
+              {loading ? "Signing you in…" : "Enter my name"}
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </form>
 
-          <div className="my-6 flex items-center gap-3">
-            <div className="flex-1 h-px bg-slate-800" />
-            <span className="text-[color:var(--color-text-muted)] text-sm">or</span>
-            <div className="flex-1 h-px bg-slate-800" />
+          <div className="flex items-center gap-4 my-7">
+            <span className="flex-1 p-rule" />
+            <span className="p-tick text-ink-soft">or</span>
+            <span className="flex-1 p-rule" />
           </div>
 
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="btn btn-ghost w-full py-3"
+            className="p-btn p-btn-outline p-btn-block"
           >
             Continue with Google
           </button>
-
-          <p className="text-center text-[color:var(--color-text-muted)] text-sm mt-6">
-            Already have an account?{' '}
-            <Link to="/login" className="text-[color:var(--color-highlight)] hover:text-white font-medium">
-              Sign in
-            </Link>
-          </p>
         </div>
+
+        <p className="text-center mt-8">
+          <Link to="/login" className="p-link text-ink-deep">
+            Already have a seat
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </Link>
+        </p>
       </motion.div>
     </div>
   );

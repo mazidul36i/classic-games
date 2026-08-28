@@ -1,12 +1,15 @@
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import { RotateCcw } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { saveGameResult } from "../firebase/firestore";
+import GameHead from "../components/game/GameHead";
 import GameStats from "../components/game/GameStats";
 import WinModal from "../components/game/WinModal";
 import type { Difficulty } from "../types/game.types";
-import { ChevronLeft, RotateCcw } from "lucide-react";
+
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 // Word pairs for matching (word → related word / synonym / antonym)
 const WORD_PAIRS: [string, string][] = [
@@ -48,8 +51,8 @@ const generateWordCards = (difficulty: Difficulty): WordCard[] => {
 
 export default function WordMatchPage() {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
+  const reduce = useReducedMotion();
 
   const rawDifficulty = params.get("difficulty") as Difficulty;
   const difficulty: Difficulty = ["4x4", "6x6", "8x8"].includes(rawDifficulty) ? rawDifficulty : "4x4";
@@ -140,61 +143,61 @@ export default function WordMatchPage() {
   };
 
   const cols = difficulty === "4x4" ? "grid-cols-4" : "grid-cols-6";
-  const cellSizeClass =
-    difficulty === "4x4" ? "w-16 h-16 sm:w-20 sm:h-20" : "w-12 h-16 sm:w-14 sm:h-20";
+  const cellSizeClass = difficulty === "4x4" ? "h-20 sm:h-24" : "h-16 sm:h-20";
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-10 flex flex-col items-center gap-6">
-      <div className="flex items-center justify-between w-full max-w-3xl">
-        <button
-          onClick={ () => navigate(-1) }
-          className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
-        >
-          <ChevronLeft className="text-xl font-bold text-white mr-1" />
-        </button>
-        <h1 className="text-xl font-bold text-white">Word Match</h1>
-        <button
-          onClick={ restart }
-          className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
-        >
-          <RotateCcw className="text-xl font-bold text-white" />
-        </button>
-      </div>
+    <div className="relative z-10 max-w-[42rem] mx-auto px-5 sm:px-10 pt-6 pb-20 flex flex-col items-center">
+      <GameHead
+        rank="J"
+        suit="♥"
+        red
+        title="Word Match"
+        meta={`${difficulty.replace("x", "×")} · ${totalPairs} pairs`}
+        action={
+          <button onClick={restart} className="p-icon-btn" aria-label="Shuffle and deal again">
+            <RotateCcw className="w-4.5 h-4.5" strokeWidth={1.75} />
+          </button>
+        }
+      />
 
-      <GameStats moves={ moves } time={ time } matched={ matchedPairs } total={ totalPairs } />
+      <GameStats moves={moves} time={time} matched={matchedPairs} total={totalPairs} />
 
       <motion.div
-        className={ `grid ${ cols } gap-2` }
-        initial={ { opacity: 0, y: 20 } }
-        animate={ { opacity: 1, y: 0 } }
+        className="p-felt rounded-sm w-full mt-9 p-6 sm:p-8"
+        initial={reduce ? false : { opacity: 0, y: 26 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: EASE }}
       >
-        { cards.map((card) => (
-          <motion.button
-            key={ card.id }
-            onClick={ () => handleFlip(card.id) }
-            disabled={ isLocked || isComplete || card.isFlipped || card.isMatched }
-            className={ `${ cellSizeClass } px-2 rounded-xl border-2 text-sm font-semibold transition-all ${
-              card.isMatched
-                ? "bg-emerald-900/60 border-emerald-500 text-emerald-300"
-                : card.isFlipped
-                  ? "bg-indigo-900/60 border-indigo-400 text-white"
-                  : "bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-500 cursor-pointer"
-            }` }
-            whileTap={ { scale: 0.95 } }
-          >
-            { (card.isFlipped || card.isMatched) ? card.word : "?" }
-          </motion.button>
-        )) }
+        <div className={`relative z-10 grid ${cols} gap-2 sm:gap-2.5`}>
+          {cards.map((card, i) => {
+            const shown = card.isFlipped || card.isMatched;
+            return (
+              <motion.button
+                key={card.id}
+                onClick={() => handleFlip(card.id)}
+                disabled={isLocked || isComplete || shown}
+                className={`p-word ${cellSizeClass} ${
+                  card.isMatched ? "p-word-matched" : shown ? "" : "p-word-down"
+                }`}
+                initial={reduce ? false : { opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: Math.min(i * 0.015, 0.3), ease: EASE }}
+                whileTap={reduce || shown ? undefined : { scale: 0.95 }}
+              >
+                {shown ? card.word : ""}
+              </motion.button>
+            );
+          })}
+        </div>
       </motion.div>
 
       <WinModal
-        isOpen={ showModal }
-        moves={ moves }
-        time={ time }
-        score={ finalScore }
-        onPlayAgain={ restart }
+        isOpen={showModal}
+        moves={moves}
+        time={time}
+        score={finalScore}
+        onPlayAgain={restart}
       />
     </div>
   );
 }
-

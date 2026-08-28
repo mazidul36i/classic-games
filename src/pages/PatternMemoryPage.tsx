@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ArrowRight } from "lucide-react";
+import GameHead from "../components/game/GameHead";
 import { useAuth } from "../hooks/useAuth";
 import { saveGameResult } from "../firebase/firestore";
-import { ChevronLeft } from "lucide-react";
 
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const GRID_SIZE = 4; // 4x4 = 16 cells
 const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
 const MAX_LIVES = 3;
@@ -16,7 +17,7 @@ const randomInt = (max: number): number => {
 
 export default function PatternMemoryPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const reduce = useReducedMotion();
   const [pattern, setPattern] = useState<number[]>([]);
   const [playerPattern, setPlayerPattern] = useState<number[]>([]);
   const [level, setLevel] = useState(1);
@@ -159,102 +160,122 @@ export default function PatternMemoryPage() {
     };
   }, []);
 
+  const remaining = pattern.length - playerPattern.length;
+  const status = isShowingPattern
+    ? { text: "Mark where it falls", tone: "p-status-live" }
+    : errorCell !== null && !isGameOver
+      ? { text: "Missed — watch the rest", tone: "p-status-miss" }
+      : isPlayerTurn
+        ? { text: `${remaining} left to name`, tone: "p-status-turn" }
+        : isGameOver
+          ? { text: "The hand is out", tone: "p-status-miss" }
+          : { text: "Press start to deal", tone: "" };
+
   return (
-    <div className="max-w-lg mx-auto px-4 py-10 flex flex-col items-center gap-6">
+    <div className="relative z-10 max-w-[36rem] mx-auto px-5 sm:px-10 pt-6 pb-20 flex flex-col items-center">
+      <GameHead
+        rank="Q"
+        suit="♣"
+        title="Pattern Memory"
+        meta="Sixteen cells · a longer figure each round"
+        action={
+          <span className="p-hearts" aria-label={`${lives} of ${MAX_LIVES} lives left`}>
+            {Array.from({ length: MAX_LIVES }, (_, i) => (
+              <span key={i} className={i < lives ? "p-heart-full" : "p-heart-spent"} aria-hidden="true">
+                ♥
+              </span>
+            ))}
+          </span>
+        }
+      />
 
-      {/* Header */ }
-      <div className="flex items-center justify-between w-full max-w-3xl">
-        <button
-          onClick={ () => navigate(-1) }
-          className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
-        >
-          <ChevronLeft className="text-xl font-bold text-white mr-1" />
-        </button>
-        <h1 className="text-xl font-bold text-white">Pattern Memory</h1>
-        <div
-          className="bg-slate-600 text-shadow-accent text-shadow-2xs rounded-xl px-2 py-1 text-sm">
-          { "❤️".repeat(lives) }{ "🖤".repeat(MAX_LIVES - lives) }
+      <div className="p-gauges w-full max-w-md">
+        <div className="p-gauge">
+          <div className="p-figure text-[1.7rem] mb-1.5">{level}</div>
+          <div className="p-tick text-ink-soft">Round</div>
+        </div>
+        <div className="p-gauge">
+          <div className="p-figure text-[1.7rem] mb-1.5">{score}</div>
+          <div className="p-tick text-ink-soft">Score</div>
+        </div>
+        <div className="p-gauge">
+          <div className="p-figure text-[1.7rem] mb-1.5">{pattern.length}</div>
+          <div className="p-tick text-ink-soft">Marks</div>
         </div>
       </div>
 
-      <div className="flex gap-6">
-        <div className="text-center">
-          <div className="text-slate-400 text-xs uppercase">Level</div>
-          <div className="text-2xl font-bold text-white">{ level }</div>
-        </div>
-        <div className="text-center">
-          <div className="text-slate-400 text-xs uppercase">Score</div>
-          <div className="text-2xl font-bold text-amber-400">{ score }</div>
-        </div>
-        <div className="text-center">
-          <div className="text-slate-400 text-xs uppercase">Target</div>
-          <div className="text-2xl font-bold text-indigo-400">{ pattern.length } cells</div>
-        </div>
-      </div>
+      <motion.div
+        className="p-felt rounded-sm w-full mt-9 px-6 py-8 sm:px-10 sm:py-10"
+        initial={reduce ? false : { opacity: 0, y: 26 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: EASE }}
+      >
+        <div className="relative z-10 flex flex-col items-center gap-8">
+          <span className={`p-status ${status.tone}`} aria-live="polite">
+            {status.text}
+          </span>
 
-      <div className={ `px-4 py-2 rounded-xl text-sm font-medium ${
-        isShowingPattern ? "bg-amber-900/30 text-amber-400 border border-amber-700" :
-          errorCell !== null && !isGameOver ? "bg-red-900/30 text-red-300 border border-red-700" :
-          isPlayerTurn ? "bg-indigo-900/30 text-indigo-400 border border-indigo-700" :
-            "bg-slate-800 text-slate-400 border border-slate-700"
-      }` }>
-        { isShowingPattern ? "👁️ Memorize the pattern..." :
-          errorCell !== null && !isGameOver ? "💔 Wrong cell! Watch the missed cells, then try again." :
-          isPlayerTurn ? `🎯 Tap the remaining ${ pattern.length - playerPattern.length } cells` :
-            isGameOver ? "💀 Wrong cell!" : "Press Start to play" }
-      </div>
+          <div className="grid grid-cols-4 gap-2.5 w-full max-w-[20rem]">
+            {Array.from({ length: TOTAL_CELLS }, (_, i) => {
+              const tone =
+                errorCell === i
+                  ? "p-pad-miss"
+                  : highlightedCells.includes(i)
+                    ? "p-pad-lit"
+                    : missedCells.includes(i)
+                      ? "p-pad-shown"
+                      : successCells.includes(i)
+                        ? "p-pad-hit"
+                        : "";
+              return (
+                <motion.button
+                  key={i}
+                  onClick={() => handleCellClick(i)}
+                  disabled={!isPlayerTurn}
+                  aria-label={`Cell ${i + 1}`}
+                  className={`p-tile ${tone}`}
+                  whileTap={reduce || !isPlayerTurn ? undefined : { scale: 0.92 }}
+                />
+              );
+            })}
+          </div>
 
-      {/* Pattern Grid */ }
-      <div className="grid grid-cols-4 gap-2">
-        { Array.from({ length: TOTAL_CELLS }, (_, i) => (
-          <motion.button
-            key={ i }
-            onClick={ () => handleCellClick(i) }
-            disabled={ !isPlayerTurn }
-            className={ `w-16 h-16 rounded-lg transition-all border-2 ${
-              errorCell === i
-                ? "bg-red-600 border-red-400"
-                : highlightedCells.includes(i)
-                  ? "bg-amber-400 border-amber-300 scale-105"
-                  : missedCells.includes(i)
-                    ? "bg-cyan-900/70 border-cyan-500"
-                    : successCells.includes(i)
-                      ? "bg-emerald-600 border-emerald-400"
-                      : "bg-slate-800 border-slate-600 hover:bg-slate-700 hover:border-slate-500 disabled:cursor-not-allowed"
-            }` }
-            whileTap={ { scale: isPlayerTurn ? 0.92 : 1 } }
-          />
-        )) }
-      </div>
+          {!isStarted && !isGameOver && (
+            <button onClick={startGame} className="p-btn p-btn-cream">
+              Deal the first
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </motion.div>
 
       <AnimatePresence>
-        { isGameOver && (
+        {isGameOver && (
           <motion.div
-            className="text-center p-6 bg-slate-800 border border-slate-700 rounded-2xl w-full"
-            initial={ { opacity: 0, y: 10 } }
-            animate={ { opacity: 1, y: 0 } }
+            className="p-panel w-full mt-8 px-7 py-8 text-center"
+            initial={reduce ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
           >
-            <div className="text-4xl mb-2">💀</div>
-            <p className="text-white font-bold text-xl">Wrong Pattern!</p>
-            <p className="text-slate-400 mt-1">Level { level } · Score: { score }</p>
-            <button
-              onClick={ startGame }
-              className="mt-4 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors"
-            >
-              Play Again
+            <span className="p-tick text-vermilion">Out of lives</span>
+            <h2 className="p-display text-[1.7rem] mt-4 mb-6">The figure got away.</h2>
+            <div className="p-gauges mb-8">
+              <div className="p-gauge">
+                <div className="p-figure text-[1.5rem] mb-1.5">{level}</div>
+                <div className="p-tick text-ink-soft">Round reached</div>
+              </div>
+              <div className="p-gauge">
+                <div className="p-figure text-[1.5rem] mb-1.5">{score}</div>
+                <div className="p-tick text-ink-soft">Score</div>
+              </div>
+            </div>
+            <button onClick={startGame} className="p-btn p-btn-solid">
+              Deal again
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </motion.div>
-        ) }
+        )}
       </AnimatePresence>
-
-      { !isStarted && !isGameOver && (
-        <button
-          onClick={ startGame }
-          className="px-10 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors text-lg"
-        >
-          Start Game
-        </button>
-      ) }
     </div>
   );
 }

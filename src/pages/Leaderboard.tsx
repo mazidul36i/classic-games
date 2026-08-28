@@ -1,22 +1,23 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
+import PageHead from "../components/layout/PageHead";
 import { getLeaderboard } from "../firebase/firestore";
 import type { GameType, Difficulty } from "../types/game.types";
-import { ChevronLeft } from "lucide-react";
 
-const GAMES: { id: GameType; label: string; badge: string }[] = [
-  { id: "card-flip", label: "Card Flip", badge: "CF" },
-  { id: "number-sequence", label: "Number Sequence", badge: "NS" },
-  { id: "pattern-memory", label: "Pattern Memory", badge: "PM" },
-  { id: "word-match", label: "Word Match", badge: "WM" },
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const GAMES: { id: GameType; label: string; rank: string; suit: string; red: boolean }[] = [
+  { id: "card-flip", label: "Card Flip", rank: "A", suit: "♠", red: false },
+  { id: "number-sequence", label: "Sequence", rank: "K", suit: "♦", red: true },
+  { id: "pattern-memory", label: "Pattern", rank: "Q", suit: "♣", red: false },
+  { id: "word-match", label: "Word Match", rank: "J", suit: "♥", red: true },
 ];
 
 const DIFFICULTIES: { id: Difficulty | "all"; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "4x4", label: "4x4" },
-  { id: "6x6", label: "6x6" },
-  { id: "8x8", label: "8x8" },
+  { id: "4x4", label: "4×4" },
+  { id: "6x6", label: "6×6" },
+  { id: "8x8", label: "8×8" },
 ];
 
 interface LeaderboardEntry {
@@ -30,7 +31,7 @@ interface LeaderboardEntry {
 }
 
 export default function Leaderboard() {
-  const navigate = useNavigate();
+  const reduce = useReducedMotion();
   const [selectedGame, setSelectedGame] = useState<GameType>("card-flip");
   const [selectedDiff, setSelectedDiff] = useState<Difficulty | "all">("all");
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -49,133 +50,135 @@ export default function Leaderboard() {
         setLoading(false);
       }
     };
-    fetchData()
-      .then(() => {
-      });
+    void fetchData();
   }, [selectedGame, selectedDiff]);
 
+  const currentGame = GAMES.find((g) => g.id === selectedGame)!;
+
   return (
-    <div className="max-w-3xl mx-auto px-4 pt-4 md:pt-7 lg:py-10 pb-10">
+    <div className="relative z-10 max-w-[54rem] mx-auto px-5 sm:px-10 pt-6 pb-20 sm:pb-28">
+      <PageHead
+        section="The Standings"
+        kicker="The record"
+        title={
+          <>
+            An honest
+            <br />
+            account.
+          </>
+        }
+        lede="Every finished hand is written down. These are the twenty sharpest returns on record."
+      />
+
       <motion.div
-        initial={ { opacity: 0, y: 20 } }
-        animate={ { opacity: 1, y: 0 } }
-        transition={ { duration: 0.4 } }
+        initial={reduce ? false : { opacity: 0, y: 26 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.75, delay: 0.12, ease: EASE }}
+        className="mt-14 sm:mt-16"
       >
-        <div className="flex items-center mb-2 gap-4">
-          <button
-            onClick={ () => navigate(-1) }
-            className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"
-          >
-            <ChevronLeft className="text-xl font-bold text-white mr-1" />
-          </button>
-          <h1 className="text-3xl font-bold text-white">Leaderboard</h1>
-        </div>
-        <p className="text-text-muted mb-8">Top players across all games</p>
-
-        <div className="flex gap-2 flex-wrap mb-4">
-          { GAMES.map((game) => (
+        <div className="p-rule pt-6 flex flex-wrap gap-2.5 mb-3">
+          {GAMES.map((game) => (
             <button
-              key={ game.id }
-              onClick={ () => setSelectedGame(game.id) }
-              className={ `option-btn flex items-center gap-2 p-1.5 sm:p-2 md:p-3 pr-3 sm:pr-3.5 md:pr-4 text-left ${
-                selectedGame === game.id ? "option-btn-active" : ""
-              }` }
+              key={game.id}
+              onClick={() => setSelectedGame(game.id)}
+              aria-pressed={selectedGame === game.id}
+              className={`p-opt p-opt-card ${selectedGame === game.id ? "p-opt-on" : ""}`}
             >
-              <span className="logo-mark text-xs sm:text-sm aspect-square">{ game.badge }</span>
-              <span className="text-xs sm:text-sm font-medium">{ game.label }</span>
+              <span
+                className={`p-opt-rank ${
+                  selectedGame === game.id ? "" : game.red ? "text-vermilion" : "text-ink-deep"
+                }`}
+              >
+                {game.rank}
+                {game.suit}
+              </span>
+              <span>{game.label}</span>
             </button>
-          )) }
+          ))}
         </div>
 
-        <div className="flex gap-2 mb-6">
-          { DIFFICULTIES.map((d) => (
+        <div className="flex flex-wrap gap-2.5 mb-9">
+          {DIFFICULTIES.map((d) => (
             <button
-              key={ d.id }
-              onClick={ () => setSelectedDiff(d.id) }
-              className={ `option-btn px-3 py-1.5 text-xs font-medium ${
-                selectedDiff === d.id ? "option-btn-active" : ""
-              }` }
+              key={d.id}
+              onClick={() => setSelectedDiff(d.id)}
+              aria-pressed={selectedDiff === d.id}
+              className={`p-opt ${selectedDiff === d.id ? "p-opt-on" : ""}`}
             >
-              { d.label }
+              {d.label}
             </button>
-          )) }
+          ))}
         </div>
 
-        <div className="surface overflow-hidden">
-          { loading ? (
-            <div className="flex items-center justify-center py-16 text-text-muted">
-              Loading...
-            </div>
+        <div className="p-panel p-panel-plain overflow-hidden">
+          <div className="p-panel-head p-panel-head-flush px-5 sm:px-6 pt-5">
+            <span className="p-tick">{currentGame.label}</span>
+            <span className="p-tick">
+              {selectedDiff === "all" ? "All hands" : selectedDiff.replace("x", "×")}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="py-20 text-center p-tick text-ink-soft">Reading the ledger…</div>
           ) : entries.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <span className="badge mono">NO SCORES YET</span>
-              <p className="text-text-muted">Be the first to play!</p>
+            <div className="py-20 text-center px-6">
+              <p className="p-display text-[1.35rem] mb-3">Nothing entered yet.</p>
+              <p className="text-[0.95rem] text-ink-soft">
+                The page is blank. Play a hand and put the first name on it.
+              </p>
             </div>
           ) : (
-            <table className="w-full">
-              <thead>
-              <tr className="border-b border-slate-800/60">
-                <th
-                  className="text-left px-4 py-3 text-text-muted text-xs uppercase tracking-wide font-medium w-16">
-                  Rank
-                </th>
-                <th
-                  className="text-left px-4 py-3 text-text-muted text-xs uppercase tracking-wide font-medium">
-                  Player
-                </th>
-                <th
-                  className="text-right px-4 py-3 text-text-muted text-xs uppercase tracking-wide font-medium">
-                  Score
-                </th>
-                <th
-                  className="text-right px-4 py-3 text-text-muted text-xs uppercase tracking-wide font-medium hidden sm:table-cell">
-                  Difficulty
-                </th>
-                <th
-                  className="text-right px-4 py-3 text-text-muted text-xs uppercase tracking-wide font-medium hidden sm:table-cell">
-                  Moves
-                </th>
-              </tr>
-              </thead>
-              <tbody>
-              { entries.map((entry, i) => (
-                <motion.tr
-                  key={ entry.id }
-                  className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
-                  initial={ { opacity: 0, x: -10 } }
-                  animate={ { opacity: 1, x: 0 } }
-                  transition={ { delay: i * 0.03 } }
-                >
-                  <td className="px-4 py-3 text-center">
-                    { i < 3 ? (
-                      <span className="badge mono">{ i + 1 }</span>
-                    ) : (
-                      <span className="text-text-muted text-sm font-medium">#{ i + 1 }</span>
-                    ) }
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-[#072225] text-xs font-bold">
-                        { entry.displayName?.[0]?.toUpperCase() || "P" }
-                      </div>
-                      <span className="text-white text-sm font-medium">{ entry.displayName || "Anonymous" }</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-accent-2 font-bold">{ entry.score }</span>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden sm:table-cell">
-                    <span className="text-text-muted text-sm">{ entry.difficulty || "-" }</span>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden sm:table-cell">
-                    <span className="text-text-muted text-sm">{ entry.moves ?? "-" }</span>
-                  </td>
-                </motion.tr>
-              )) }
-              </tbody>
-            </table>
-          ) }
+            <div className="overflow-x-auto">
+              <table className="p-ledger">
+                <thead>
+                  <tr>
+                    <th className="w-16">Rank</th>
+                    <th>Player</th>
+                    <th className="p-num">Score</th>
+                    <th className="p-num hidden sm:table-cell">Hand</th>
+                    <th className="p-num hidden sm:table-cell">Moves</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry, i) => (
+                    <motion.tr
+                      key={entry.id}
+                      initial={reduce ? false : { opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.4), duration: 0.4, ease: EASE }}
+                    >
+                      <td>
+                        {i < 3 ? (
+                          <span className="p-rank p-rank-top">{i + 1}</span>
+                        ) : (
+                          <span className="p-figure p-figure-soft text-[1.05rem]">{i + 1}</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <span className="p-avatar w-8 h-8 text-[0.8rem]">
+                            {entry.displayName?.[0]?.toUpperCase() || "P"}
+                          </span>
+                          <span className="p-engrave text-[1.05rem] text-ink-deep">
+                            {entry.displayName || "Anonymous"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-num">
+                        <span className="p-figure text-[1.15rem]">{entry.score}</span>
+                      </td>
+                      <td className="p-num hidden sm:table-cell text-ink-soft">
+                        {entry.difficulty ? entry.difficulty.replace("x", "×") : "—"}
+                      </td>
+                      <td className="p-num hidden sm:table-cell text-ink-soft">
+                        {entry.moves ?? "—"}
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </motion.div>
     </div>

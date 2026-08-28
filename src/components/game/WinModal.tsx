@@ -1,5 +1,6 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
+import { RotateCcw } from "lucide-react";
 
 interface WinModalProps {
   isOpen: boolean;
@@ -10,58 +11,71 @@ interface WinModalProps {
 }
 
 const formatTime = (secs: number): string => {
-  const m = Math.floor(secs / 60).toString().padStart(2, '0');
-  const s = (secs % 60).toString().padStart(2, '0');
+  const m = Math.floor(secs / 60).toString().padStart(2, "0");
+  const s = (secs % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 };
 
+/** The house's written acknowledgement that a hand was seen out. */
 export default function WinModal({ isOpen, moves, time, score, onPlayAgain }: WinModalProps) {
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="p-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
         >
           <motion.div
-            className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full mx-4 text-center shadow-2xl"
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.7, opacity: 0 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Hand complete"
+            className="p-panel w-full max-w-[26rem] px-7 sm:px-9 pt-8 pb-9 text-center"
+            initial={{ scale: 0.9, opacity: 0, y: 18 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.94, opacity: 0, y: 10 }}
+            transition={{ type: "spring", damping: 24, stiffness: 300 }}
           >
-            <div className="text-6xl mb-4">🎉</div>
-            <h2 className="text-3xl font-bold text-white mb-2">You Won!</h2>
-            <p className="text-slate-400 mb-6">Excellent memory skills!</p>
-
-            {/* Score breakdown */}
-            <div className="grid grid-cols-3 gap-3 mb-8">
-              {[
-                { label: 'Score', value: score, color: 'text-amber-400' },
-                { label: 'Moves', value: moves, color: 'text-white' },
-                { label: 'Time', value: formatTime(time), color: 'text-indigo-400' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="bg-slate-900 rounded-xl p-3">
-                  <div className="text-slate-400 text-xs uppercase tracking-wide mb-1">{label}</div>
-                  <div className={`text-xl font-bold ${color}`}>{value}</div>
-                </div>
-              ))}
+            <div className="p-rule-double pt-3 pb-6">
+              <span className="p-suits flex items-center justify-center gap-3 text-[1.3rem]" aria-hidden="true">
+                <span className="text-ink-deep">♠</span>
+                <span className="text-vermilion">♥</span>
+                <span className="text-vermilion">♦</span>
+                <span className="text-ink-deep">♣</span>
+              </span>
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={onPlayAgain}
-                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-colors"
-              >
-                Play Again
+            <span className="p-tick text-vermilion">The house certifies</span>
+            <h2 className="p-display text-[2rem] leading-[1.08] mt-4 mb-8">
+              The hand
+              <br />
+              is yours.
+            </h2>
+
+            <div className="p-gauges mb-9">
+              <div className="p-gauge">
+                <div className="p-figure text-[1.5rem] mb-1.5">{score}</div>
+                <div className="p-tick text-ink-soft">Score</div>
+              </div>
+              <div className="p-gauge">
+                <div className="p-figure text-[1.5rem] mb-1.5">{moves}</div>
+                <div className="p-tick text-ink-soft">Moves</div>
+              </div>
+              <div className="p-gauge">
+                <div className="p-figure text-[1.5rem] mb-1.5">{formatTime(time)}</div>
+                <div className="p-tick text-ink-soft">Time</div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <button onClick={onPlayAgain} className="p-btn p-btn-solid p-btn-block">
+                <RotateCcw className="w-3.5 h-3.5" />
+                Deal another
               </button>
-              <Link
-                to="/lobby"
-                className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-colors text-center"
-              >
-                Game Lobby
+              <Link to="/lobby/card-flip" className="p-btn p-btn-outline p-btn-block">
+                Back to the table
               </Link>
             </div>
           </motion.div>

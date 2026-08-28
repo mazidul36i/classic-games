@@ -271,10 +271,8 @@ export default function Home() {
   const reduce = useReducedMotion();
 
   return (
-    <div className="parlour">
-      <div className="parlour-paper" aria-hidden="true" />
-
-      <div className="relative z-10">
+    /* The paper shell and its grain come from Layout; every route wears them. */
+    <div className="relative z-10">
         {/* ━━━ MASTHEAD ━━━ */}
         <div className="max-w-[1180px] mx-auto px-6 sm:px-10 pt-8">
           <motion.div
@@ -282,16 +280,14 @@ export default function Home() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8 }}
             className="p-rule-double pt-3 flex items-center justify-between gap-4 text-ink-soft"
-          >
-            <span className="p-tick hidden sm:block">Est. MMXXVI</span>
+          >
             <span className="p-engrave text-center flex-1 text-ink-deep text-[0.95rem] tracking-[0.14em] uppercase">
               The Memory Parlour
               <span className="hidden xs:inline">
                 <span className="text-vermilion mx-2">✦</span>
                 A House of Four Diversions
               </span>
-            </span>
-            <span className="p-tick hidden sm:block">Vol. I</span>
+            </span>
           </motion.div>
           <div className="p-rule mt-3" />
         </div>
@@ -508,7 +504,6 @@ export default function Home() {
             </div>
           </motion.div>
         </section>
-      </div>
     </div>
   );
 }
