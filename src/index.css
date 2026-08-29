@@ -314,20 +314,24 @@ body {
   transition: border-color 320ms ease;
 }
 
-.p-card:hover {
-  transform: translateY(-14px) rotate(0deg);
-  box-shadow: 12px 18px 0 rgba(23, 19, 14, 0.13);
-  border-color: var(--color-ink-deep);
-}
+@media (hover: hover) {
+  .p-card:hover {
+    transform: translateY(-14px) rotate(0deg);
+    box-shadow: 12px 18px 0 rgba(23, 19, 14, 0.13);
+    border-color: var(--color-ink-deep);
+  }
 
-.p-card:hover::before { border-color: rgba(193, 54, 31, 0.5); }
+  .p-card:hover::before { border-color: rgba(193, 54, 31, 0.5); }
+}
 
 /* The four game cards sit as a lightly fanned hand */
 .p-hand > *:nth-child(1) .p-card { transform: rotate(-2.4deg); }
 .p-hand > *:nth-child(2) .p-card { transform: rotate(-0.8deg) translateY(6px); }
 .p-hand > *:nth-child(3) .p-card { transform: rotate(0.9deg); }
 .p-hand > *:nth-child(4) .p-card { transform: rotate(2.6deg) translateY(6px); }
-.p-hand > * .p-card:hover { transform: translateY(-14px) rotate(0deg); }
+@media (hover: hover) {
+  .p-hand > * .p-card:hover { transform: translateY(-14px) rotate(0deg); }
+}
 
 .p-pip {
   font-family: var(--font-engrave);
@@ -361,12 +365,14 @@ body {
   transition: border-color 400ms ease;
 }
 
-.p-card:hover .p-medallion {
-  transform: scale(1.07) rotate(-6deg);
-  background-color: rgba(193, 54, 31, 0.07);
-}
+@media (hover: hover) {
+  .p-card:hover .p-medallion {
+    transform: scale(1.07) rotate(-6deg);
+    background-color: rgba(193, 54, 31, 0.07);
+  }
 
-.p-card:hover .p-medallion::after { border-color: rgba(193, 54, 31, 0.45); }
+  .p-card:hover .p-medallion::after { border-color: rgba(193, 54, 31, 0.45); }
+}
 
 /* Keeps every card's title/discipline block the same height so the
    medallions and tag rows line up across the hand */
@@ -639,7 +645,10 @@ body {
   transition: color 200ms ease, background-size 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.p-navlink:hover { color: var(--color-ink-deep); background-size: 100% 1px; }
+/* Skip the current page's link — hover would thin its 2px rule back to 1px. */
+@media (hover: hover) {
+  .p-navlink:not(.p-navlink-on):hover { color: var(--color-ink-deep); background-size: 100% 1px; }
+}
 .p-navlink-on { color: var(--color-ink-deep); background-size: 100% 2px; }
 
 /* ── Small letterpress buttons, for chrome and dense panels ── */
@@ -841,7 +850,11 @@ body {
     background-color 200ms ease, color 200ms ease, border-color 200ms ease;
 }
 
-.p-opt:hover { border-color: var(--color-ink-deep); color: var(--color-ink-deep); }
+/* Hover must skip the chosen option — its ink-on-ink would erase the label.
+   Gated on a real pointer so a tap doesn't leave the style stuck on a phone. */
+@media (hover: hover) {
+  .p-opt:not(.p-opt-on):hover { border-color: var(--color-ink-deep); color: var(--color-ink-deep); }
+}
 
 .p-opt-on {
   background: var(--color-ink-deep);
@@ -984,7 +997,13 @@ body {
     border-color 220ms ease, color 220ms ease, box-shadow 220ms ease;
 }
 
-.p-pad:hover:not(:disabled) { border-color: rgba(242, 236, 225, 0.6); background: rgba(251, 248, 242, 0.12); }
+/* A pad showing a state has earned its colour; hover must not wash it out. */
+@media (hover: hover) {
+  .p-pad:not(.p-pad-lit, .p-pad-hit, .p-pad-miss, .p-pad-shown):hover:not(:disabled) {
+    border-color: rgba(242, 236, 225, 0.6);
+    background: rgba(251, 248, 242, 0.12);
+  }
+}
 .p-pad:disabled { cursor: not-allowed; }
 
 /* Pattern grid tiles are the same object, square and unlabelled */
@@ -1008,7 +1027,12 @@ body {
   pointer-events: none;
 }
 
-.p-tile:hover:not(:disabled) { border-color: rgba(242, 236, 225, 0.55); background: rgba(251, 248, 242, 0.1); }
+@media (hover: hover) {
+  .p-tile:not(.p-pad-lit, .p-pad-hit, .p-pad-miss, .p-pad-shown):hover:not(:disabled) {
+    border-color: rgba(242, 236, 225, 0.55);
+    background: rgba(251, 248, 242, 0.1);
+  }
+}
 .p-tile:disabled { cursor: not-allowed; }
 
 /* Shared cell states — declared after both shapes so they take the cell */
@@ -1053,7 +1077,9 @@ body {
   pointer-events: none;
 }
 
-.p-word:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 3px 7px 0 rgba(23, 19, 14, 0.2); }
+@media (hover: hover) {
+  .p-word:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 3px 7px 0 rgba(23, 19, 14, 0.2); }
+}
 
 /* Face down: the vermilion crosshatch back of the deck */
 .p-word-down {
@@ -1221,7 +1247,10 @@ body {
   border-color: rgba(242, 236, 225, 0.3);
 }
 
-.p-felt .p-opt:hover { color: var(--color-paper); border-color: var(--color-paper); }
+/* Same guard on the baize, where the chosen option is paper-on-paper. */
+@media (hover: hover) {
+  .p-felt .p-opt:not(.p-opt-on):hover { color: var(--color-paper); border-color: var(--color-paper); }
+}
 
 .p-felt .p-opt-on {
   background: var(--color-paper);
