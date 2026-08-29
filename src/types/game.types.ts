@@ -45,6 +45,18 @@ export interface GameResult {
   isWin: boolean;
 }
 
+// A player holds at most one row per game board; `id` is `${uid}_${difficulty}`.
+export interface LeaderboardEntry {
+  id: string;
+  uid: string;
+  displayName: string;
+  score: number;
+  moves?: number;
+  timeSeconds?: number;
+  difficulty?: Difficulty;
+  completedAt?: number;
+}
+
 // Number Sequence Game
 export interface SequenceGameState {
   sequence: number[];

@@ -12,11 +12,13 @@ import {
   getDocs,
   increment,
   serverTimestamp,
+  runTransaction,
 } from 'firebase/firestore';
+import type { QueryConstraint } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { db } from './config';
 import type { UserProfile } from '../types/user.types';
-import type { GameResult } from '../types/game.types';
+import type { GameResult, LeaderboardEntry } from '../types/game.types';
 
 // ─── User Profile ────────────────────────────────────────────────────────────
 
@@ -74,17 +76,7 @@ export const saveGameResult = async (result: GameResult): Promise<string> => {
     completedAt: serverTimestamp(),
   });
 
-  // Save to leaderboard collection
-  await addDoc(collection(db, 'leaderboard', result.gameType, 'scores'), {
-    uid: result.uid,
-    displayName: result.displayName,
-    score: result.score,
-    moves: result.moves,
-    timeSeconds: result.timeSeconds,
-    difficulty: result.difficulty,
-    completedAt: serverTimestamp(),
-  });
-
+  await submitLeaderboardScore(result);
   await updateUserStats(result.uid, result.isWin, result.gameType, result.score);
   return ref.id;
 };
@@ -102,24 +94,68 @@ export const getUserGameHistory = async (uid: string): Promise<GameResult[]> => 
 
 // ─── Leaderboard ──────────────────────────────────────────────────────────────
 
+// One row per player per board, so a better run replaces the player's old one
+// instead of adding a second line to the ledger.
+const entryId = (uid: string, difficulty: string) => `${uid}_${difficulty}`;
+
+/** Returns true when this run beat the player's standing entry. */
+export const submitLeaderboardScore = async (result: GameResult): Promise<boolean> => {
+  const ref = doc(
+    db,
+    'leaderboard',
+    result.gameType,
+    'scores',
+    entryId(result.uid, result.difficulty)
+  );
+
+  return runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    const previous = snap.exists() ? (snap.data() as LeaderboardEntry) : null;
+
+    if (previous && previous.score >= result.score) {
+      // Keep the better run, but let a renamed player show their current name.
+      if (previous.displayName !== result.displayName) {
+        tx.update(ref, { displayName: result.displayName });
+      }
+      return false;
+    }
+
+    tx.set(ref, {
+      uid: result.uid,
+      displayName: result.displayName,
+      score: result.score,
+      moves: result.moves,
+      timeSeconds: result.timeSeconds,
+      difficulty: result.difficulty,
+      completedAt: serverTimestamp(),
+    });
+    return true;
+  });
+};
+
+// Filtering by difficulty picks out one row per player by construction. The
+// unfiltered board can see a player once per difficulty, so it over-fetches by
+// that factor and keeps each player's best — enough to still fill `count` rows.
+const DIFFICULTIES = 3; // 4x4, 6x6, 8x8
+
 export const getLeaderboard = async (
   gameType: string,
   difficulty?: string,
   count = 20
-) => {
-  let q = query(
-    collection(db, 'leaderboard', gameType, 'scores'),
-    orderBy('score', 'desc'),
-    limit(count)
+): Promise<LeaderboardEntry[]> => {
+  const constraints: QueryConstraint[] = [];
+  if (difficulty) constraints.push(where('difficulty', '==', difficulty));
+  constraints.push(orderBy('score', 'desc'), limit(count * (difficulty ? 1 : DIFFICULTIES)));
+
+  const snap = await getDocs(
+    query(collection(db, 'leaderboard', gameType, 'scores'), ...constraints)
   );
-  if (difficulty) {
-    q = query(
-      collection(db, 'leaderboard', gameType, 'scores'),
-      where('difficulty', '==', difficulty),
-      orderBy('score', 'desc'),
-      limit(count)
-    );
+
+  const best = new Map<string, LeaderboardEntry>();
+  for (const d of snap.docs) {
+    const entry = { id: d.id, ...d.data() } as LeaderboardEntry;
+    // Docs arrive score-descending, so the first sighting of a uid is their best.
+    if (entry.uid && !best.has(entry.uid)) best.set(entry.uid, entry);
   }
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return [...best.values()].slice(0, count);
 };

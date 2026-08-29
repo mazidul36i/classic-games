@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import PageHead from "../components/layout/PageHead";
 import { getLeaderboard } from "../firebase/firestore";
-import type { GameType, Difficulty } from "../types/game.types";
+import type { GameType, Difficulty, LeaderboardEntry } from "../types/game.types";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -20,16 +20,6 @@ const DIFFICULTIES: { id: Difficulty | "all"; label: string }[] = [
   { id: "8x8", label: "8×8" },
 ];
 
-interface LeaderboardEntry {
-  id: string;
-  uid: string;
-  displayName: string;
-  score: number;
-  moves?: number;
-  timeSeconds?: number;
-  difficulty?: Difficulty;
-}
-
 export default function Leaderboard() {
   const reduce = useReducedMotion();
   const [selectedGame, setSelectedGame] = useState<GameType>("card-flip");
@@ -42,8 +32,7 @@ export default function Leaderboard() {
       setLoading(true);
       try {
         const diff = selectedDiff === "all" ? undefined : selectedDiff;
-        const data = await getLeaderboard(selectedGame, diff, 20);
-        setEntries(data as LeaderboardEntry[]);
+        setEntries(await getLeaderboard(selectedGame, diff, 20));
       } catch {
         setEntries([]);
       } finally {
@@ -58,7 +47,7 @@ export default function Leaderboard() {
   return (
     <div className="relative z-10 max-w-[54rem] mx-auto px-5 sm:px-10 pt-6 pb-20 sm:pb-28">
       <PageHead
-        section="The Standings"
+        section="The Standings"
         kicker="The record"
         title={
           <>
