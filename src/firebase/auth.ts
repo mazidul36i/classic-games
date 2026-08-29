@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { auth } from './config';
 import { createUserProfile } from './firestore';
+import { isDisposableEmail } from '../utils/emailUtils';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -20,6 +21,11 @@ export const registerWithEmail = async (
   password: string,
   displayName: string
 ) => {
+  if (isDisposableEmail(email)) {
+    throw new Error(
+      'That looks like a temporary inbox. Please sign the register with a permanent email address.'
+    );
+  }
   const { user } = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(user, { displayName });
   await createUserProfile(user, displayName);
