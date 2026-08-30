@@ -1,11 +1,12 @@
 import { useState, type CSSProperties } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { ArrowRight, Check, ChevronLeft, Copy } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, Copy, DoorOpen } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useMultiplayer } from "../hooks/useMultiplayer";
-import { startGame, cleanupRoom } from "../firebase/realtime";
+import { startGame, cleanupRoom, seatedOrder } from "../firebase/realtime";
 import { generateCards } from "../utils/cardUtils";
+import { generateWordCards } from "../utils/wordUtils";
 import Card from "../components/game/Card";
 import type { RoomPlayer } from "../types/multiplayer.types";
 
@@ -23,16 +24,28 @@ export default function MultiplayerRoom() {
   const reduce = useReducedMotion();
   const [copied, setCopied] = useState(false);
 
-  const { room, loading, myPlayer, isMyTurn, players, handleFlipCard, handleReady, handleLeave } =
-    useMultiplayer(roomId ?? null, user?.uid ?? null);
+  const {
+    room,
+    loading,
+    myPlayer,
+    isMyTurn,
+    players,
+    secondsLeft,
+    handleFlipCard,
+    handleReady,
+    handleLeave,
+  } = useMultiplayer(roomId ?? null, user?.uid ?? null);
 
   const showResult = room?.status === "finished";
 
   const handleStart = async () => {
     if (!room || !roomId) return;
-    const cards = generateCards(room.difficulty, room.theme);
-    const firstPlayer = Object.keys(room.players)[0];
-    await startGame(roomId, cards, firstPlayer);
+    const cards =
+      room.gameType === "word-match"
+        ? generateWordCards(room.difficulty)
+        : generateCards(room.difficulty, room.theme);
+    const firstPlayer = seatedOrder(room.players)[0];
+    await startGame(roomId, cards, firstPlayer, room);
   };
 
   const handleLeaveRoom = async () => {
@@ -106,13 +119,20 @@ export default function MultiplayerRoom() {
             <span className="text-vermilion mx-2 hidden sm:inline">✦</span>
             Private Room
           </span>
-          <button
-            onClick={handleCopy}
-            className="p-icon-btn"
-            aria-label={copied ? "Room code copied" : "Copy the room code"}
-          >
-            {copied ? <Check className="w-4.5 h-4.5" strokeWidth={1.75} /> : <Copy className="w-4 h-4" strokeWidth={1.75} />}
-          </button>
+          <div className="flex items-center gap-2">
+            {isHost && !showResult && (
+              <button onClick={handleCleanup} className="p-icon-btn" aria-label="Close the room">
+                <DoorOpen className="w-4.5 h-4.5" strokeWidth={1.75} />
+              </button>
+            )}
+            <button
+              onClick={handleCopy}
+              className="p-icon-btn"
+              aria-label={copied ? "Room code copied" : "Copy the room code"}
+            >
+              {copied ? <Check className="w-4.5 h-4.5" strokeWidth={1.75} /> : <Copy className="w-4 h-4" strokeWidth={1.75} />}
+            </button>
+          </div>
         </div>
 
         {/* ── The room's number, printed large ── */}
@@ -217,12 +237,26 @@ export default function MultiplayerRoom() {
           transition={{ duration: 0.7, ease: EASE }}
         >
           <div className="relative z-10 flex flex-col items-center gap-7">
-            <span
-              className={`p-status ${isMyTurn ? "p-status-turn" : "p-status-live"}`}
-              aria-live="polite"
-            >
-              {isMyTurn ? "Your turn — take a card" : `${turnHolder ?? "…"} is thinking`}
-            </span>
+            <div className="flex flex-col items-center gap-2.5">
+              <span
+                className={`p-status ${isMyTurn ? "p-status-turn" : "p-status-live"}`}
+                aria-live="polite"
+              >
+                {isMyTurn ? "Your turn — take a card" : `${turnHolder ?? "…"} is thinking`}
+              </span>
+              {/* The house does not wait forever: when this runs out, anyone at
+                  the table may move the turn on. */}
+              {secondsLeft !== null && (
+                <span
+                  className={`p-tick tabular-nums ${
+                    secondsLeft <= 10 ? "text-vermilion" : "text-paper/60"
+                  }`}
+                  aria-hidden="true"
+                >
+                  {secondsLeft > 0 ? `${secondsLeft}s on the clock` : "Clock out — passing"}
+                </span>
+              )}
+            </div>
 
             <div
               className={`grid w-fit mx-auto gap-2 sm:gap-3 place-items-center ${

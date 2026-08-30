@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <pattern id="crosshatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="9" height="9" fill="#c1361f"/>
+      <line x1="0" y1="0" x2="0" y2="9" stroke="rgba(242,236,225,0.5)" stroke-width="1.5"/>
+    </pattern>
+  </defs>
+  <rect x="1" y="1" width="30" height="30" rx="5" fill="url(#crosshatch)" stroke="#17130e" stroke-width="1.25"/>
+  <rect x="6" y="6" width="20" height="20" rx="2.5" fill="none" stroke="rgba(242,236,225,0.72)" stroke-width="1.25"/>
+</svg>

@@ -4,50 +4,13 @@ import { motion, useReducedMotion } from "framer-motion";
 import { RotateCcw } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { saveGameResult } from "../firebase/firestore";
+import { generateWordCards } from "../utils/wordUtils";
 import GameHead from "../components/game/GameHead";
 import GameStats from "../components/game/GameStats";
 import WinModal from "../components/game/WinModal";
-import type { Difficulty } from "../types/game.types";
+import type { CardItem, Difficulty } from "../types/game.types";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
-
-// Word pairs for matching (word → related word / synonym / antonym)
-const WORD_PAIRS: [string, string][] = [
-  ["Happy", "Joyful"], ["Cold", "Frigid"], ["Big", "Large"],
-  ["Fast", "Quick"], ["Smart", "Clever"], ["Brave", "Bold"],
-  ["Calm", "Peaceful"], ["Dark", "Dim"], ["Hot", "Warm"],
-  ["Small", "Tiny"], ["Old", "Ancient"], ["New", "Fresh"],
-  ["Kind", "Gentle"], ["Loud", "Noisy"], ["Strong", "Powerful"],
-  ["Rich", "Wealthy"], ["Poor", "Needy"], ["Love", "Adore"],
-];
-
-interface WordCard {
-  id: string;
-  pairId: string;
-  word: string;
-  isFlipped: boolean;
-  isMatched: boolean;
-}
-
-const shuffle = <T, >(arr: T[]): T[] => {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-};
-
-const generateWordCards = (difficulty: Difficulty): WordCard[] => {
-  const count = difficulty === "4x4" ? 8 : difficulty === "6x6" ? 18 : 18;
-  const pairs = WORD_PAIRS.slice(0, count);
-  const cards: WordCard[] = [];
-  pairs.forEach(([a, b], i) => {
-    cards.push({ id: `${ i }-a`, pairId: `${ i }`, word: a, isFlipped: false, isMatched: false });
-    cards.push({ id: `${ i }-b`, pairId: `${ i }`, word: b, isFlipped: false, isMatched: false });
-  });
-  return shuffle(cards);
-};
 
 export default function WordMatchPage() {
   const [params] = useSearchParams();
@@ -57,7 +20,7 @@ export default function WordMatchPage() {
   const rawDifficulty = params.get("difficulty") as Difficulty;
   const difficulty: Difficulty = ["4x4", "6x6", "8x8"].includes(rawDifficulty) ? rawDifficulty : "4x4";
 
-  const [cards, setCards] = useState<WordCard[]>(() => generateWordCards(difficulty));
+  const [cards, setCards] = useState<CardItem[]>(() => generateWordCards(difficulty));
   const [flippedIds, setFlippedIds] = useState<string[]>([]);
   const [matchedPairs, setMatchedPairs] = useState(0);
   const [moves, setMoves] = useState(0);
@@ -142,8 +105,8 @@ export default function WordMatchPage() {
     setFinalScore(0);
   };
 
-  const cols = difficulty === "4x4" ? "grid-cols-4" : "grid-cols-6";
-  const cellSizeClass = difficulty === "4x4" ? "h-20 sm:h-24" : "h-16 sm:h-20";
+  const cols = difficulty === "4x4" ? "grid-cols-4" : difficulty === "6x6" ? "grid-cols-6" : "grid-cols-8";
+  const cellSizeClass = difficulty === "4x4" ? "h-20 sm:h-24" : difficulty === "6x6" ? "h-16 sm:h-20" : "h-12 sm:h-16";
 
   return (
     <div className="relative z-10 max-w-[42rem] mx-auto px-5 sm:px-10 pt-6 pb-20 flex flex-col items-center">
@@ -184,7 +147,7 @@ export default function WordMatchPage() {
                 transition={{ duration: 0.35, delay: Math.min(i * 0.015, 0.3), ease: EASE }}
                 whileTap={reduce || shown ? undefined : { scale: 0.95 }}
               >
-                {shown ? card.word : ""}
+                {shown ? card.value : ""}
               </motion.button>
             );
           })}

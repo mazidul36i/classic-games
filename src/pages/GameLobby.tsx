@@ -68,7 +68,6 @@ export default function GameLobby() {
     photoURL: user!.photoURL || "",
     score: 0,
     isReady: false,
-    isCurrentTurn: false,
     joinedAt: Date.now(),
   });
 
@@ -134,11 +133,15 @@ export default function GameLobby() {
     setJoining(true);
     setError("");
     try {
-      const ok = await joinRoom(roomCode.toUpperCase(), asPlayer());
-      if (ok) {
+      const result = await joinRoom(roomCode.toUpperCase(), asPlayer());
+      if (result === "joined") {
         navigate(`/room/${roomCode.toUpperCase()}`);
+      } else if (result === "full") {
+        setError("Every seat at that table is taken.");
+      } else if (result === "in-play") {
+        setError("That hand is already under way.");
       } else {
-        setError("That room is closed, full, or already in play.");
+        setError("No room answers to that code.");
       }
     } catch {
       setError("Failed to join the room. Please try again.");

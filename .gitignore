@@ -29,3 +29,9 @@ dist-ssr
 *.sw?
 
 graphify-out
+
+# Firebase CLI / emulator scratch
+.firebase/
+database-debug.log
+firebase-debug.log
+ui-debug.log

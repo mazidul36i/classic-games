@@ -2,8 +2,6 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
-  addDoc,
   collection,
   query,
   where,
@@ -45,40 +43,61 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
   return { uid, ...snap.data() } as UserProfile;
 };
 
-export const updateUserStats = async (
-  uid: string,
-  isWin: boolean,
-  gameType: string,
-  score: number
-) => {
-  const ref = doc(db, 'users', uid);
-  const updates: Record<string, unknown> = {
-    totalGamesPlayed: increment(1),
-  };
-  if (isWin) updates.totalWins = increment(1);
-
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    const data = snap.data() as UserProfile;
-    const current = data.highScores?.[gameType] ?? 0;
-    if (score > current) {
-      updates[`highScores.${gameType}`] = score;
-    }
-  }
-  await updateDoc(ref, updates);
-};
-
 // ─── Game History ─────────────────────────────────────────────────────────────
 
+// One row per player per board, so a better run replaces the player's old one
+// instead of adding a second line to the ledger.
+const entryId = (uid: string, difficulty: string) => `${uid}_${difficulty}`;
+
+/**
+ * A finished game touches three documents — history, leaderboard, profile —
+ * and a tab closed partway through used to leave them out of step. All three
+ * now land in one transaction: either the whole hand is recorded, or none of
+ * it is.
+ */
 export const saveGameResult = async (result: GameResult): Promise<string> => {
-  const ref = await addDoc(collection(db, 'gameHistory'), {
-    ...result,
-    completedAt: serverTimestamp(),
+  const historyRef = doc(collection(db, 'gameHistory'));
+  const leaderboardRef = doc(
+    db,
+    'leaderboard',
+    result.gameType,
+    'scores',
+    entryId(result.uid, result.difficulty)
+  );
+  const userRef = doc(db, 'users', result.uid);
+
+  await runTransaction(db, async tx => {
+    const [leaderboardSnap, userSnap] = await Promise.all([tx.get(leaderboardRef), tx.get(userRef)]);
+
+    tx.set(historyRef, { ...result, completedAt: serverTimestamp() });
+
+    const previousEntry = leaderboardSnap.exists() ? (leaderboardSnap.data() as LeaderboardEntry) : null;
+    if (!previousEntry || result.score > previousEntry.score) {
+      tx.set(leaderboardRef, {
+        uid: result.uid,
+        displayName: result.displayName,
+        score: result.score,
+        moves: result.moves,
+        timeSeconds: result.timeSeconds,
+        difficulty: result.difficulty,
+        completedAt: serverTimestamp(),
+      });
+    } else if (previousEntry.displayName !== result.displayName) {
+      // Keep the better run, but let a renamed player show their current name.
+      tx.update(leaderboardRef, { displayName: result.displayName });
+    }
+
+    const userUpdates: Record<string, unknown> = { totalGamesPlayed: increment(1) };
+    if (result.isWin) userUpdates.totalWins = increment(1);
+    if (userSnap.exists()) {
+      const data = userSnap.data() as UserProfile;
+      const current = data.highScores?.[result.gameType] ?? 0;
+      if (result.score > current) userUpdates[`highScores.${result.gameType}`] = result.score;
+    }
+    tx.update(userRef, userUpdates);
   });
 
-  await submitLeaderboardScore(result);
-  await updateUserStats(result.uid, result.isWin, result.gameType, result.score);
-  return ref.id;
+  return historyRef.id;
 };
 
 export const getUserGameHistory = async (uid: string): Promise<GameResult[]> => {
@@ -93,45 +112,6 @@ export const getUserGameHistory = async (uid: string): Promise<GameResult[]> => 
 };
 
 // ─── Leaderboard ──────────────────────────────────────────────────────────────
-
-// One row per player per board, so a better run replaces the player's old one
-// instead of adding a second line to the ledger.
-const entryId = (uid: string, difficulty: string) => `${uid}_${difficulty}`;
-
-/** Returns true when this run beat the player's standing entry. */
-export const submitLeaderboardScore = async (result: GameResult): Promise<boolean> => {
-  const ref = doc(
-    db,
-    'leaderboard',
-    result.gameType,
-    'scores',
-    entryId(result.uid, result.difficulty)
-  );
-
-  return runTransaction(db, async tx => {
-    const snap = await tx.get(ref);
-    const previous = snap.exists() ? (snap.data() as LeaderboardEntry) : null;
-
-    if (previous && previous.score >= result.score) {
-      // Keep the better run, but let a renamed player show their current name.
-      if (previous.displayName !== result.displayName) {
-        tx.update(ref, { displayName: result.displayName });
-      }
-      return false;
-    }
-
-    tx.set(ref, {
-      uid: result.uid,
-      displayName: result.displayName,
-      score: result.score,
-      moves: result.moves,
-      timeSeconds: result.timeSeconds,
-      difficulty: result.difficulty,
-      completedAt: serverTimestamp(),
-    });
-    return true;
-  });
-};
 
 // Filtering by difficulty picks out one row per player by construction. The
 // unfiltered board can see a player once per difficulty, so it over-fetches by

@@ -1,0 +1,138 @@
+{
+  // The Memory Parlour — Realtime Database rules.
+  //
+  // There is no server in this project (no Cloud Functions on the free plan), so
+  // these rules are the only thing standing between a browser console and the
+  // table. Every write the client makes has a matching clause here; if you add a
+  // write, add its clause, and run the emulator before deploying.
+  //
+  // Two constants are mirrored from src/firebase/realtime.ts and must be kept in
+  // step with it:
+  //   45000     TURN_LIMIT_MS  — how long a turn may sit before anyone may pass it
+  //   21600000  ROOM_STALE_MS  — six hours, after which a waiting room may be swept
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      // No listing the whole tree: matchmaking goes through openRooms instead.
+      ".read": false,
+      ".write": false,
+
+      "$roomId": {
+        // A room code is the only thing gating a room, as it was before. Reading
+        // one requires knowing its six characters, and being signed in.
+        ".read": "auth != null",
+
+        // Whole-room writes are creation and destruction only. Everything else
+        // has to satisfy the per-field rules below.
+        ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() === auth.uid) || (!newData.exists() && (data.child('hostId').val() === auth.uid || !data.child('players').exists() || (data.child('players').child(auth.uid).exists() && data.child('status').val() !== 'playing') || now > data.child('createdAt').val() + 21600000)))",
+        ".validate": "newData.hasChildren(['hostId', 'isPrivate', 'maxPlayers', 'status', 'gameType', 'difficulty', 'theme', 'players', 'createdAt'])",
+
+        "hostId": {
+          ".validate": "newData.isString() && (!data.exists() || newData.val() === data.val())"
+        },
+        "isPrivate": {
+          ".validate": "newData.isBoolean() && (!data.exists() || newData.val() === data.val())"
+        },
+        "maxPlayers": {
+          ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 4 && (!data.exists() || newData.val() === data.val())"
+        },
+        "gameType": {
+          ".validate": "(newData.val() === 'card-flip' || newData.val() === 'word-match') && (!data.exists() || newData.val() === data.val())"
+        },
+        "difficulty": {
+          ".validate": "(newData.val() === '4x4' || newData.val() === '6x6' || newData.val() === '8x8') && (!data.exists() || newData.val() === data.val())"
+        },
+        "theme": {
+          ".validate": "newData.isString() && newData.val().length <= 20 && (!data.exists() || newData.val() === data.val())"
+        },
+        "createdAt": {
+          // Server-stamped, so the staleness sweep cannot be gamed by a bad clock.
+          ".validate": "newData.val() === now || (data.exists() && newData.val() === data.val())"
+        },
+
+        "status": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
+          ".validate": "(!data.exists() && newData.val() === 'waiting') || (data.val() === 'waiting' && newData.val() === 'playing' && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid) || (data.val() === 'playing' && newData.val() === 'finished' && root.child('rooms/' + $roomId + '/gameState/currentTurn').val() === auth.uid)"
+        },
+        "startedAt": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid",
+          ".validate": "newData.val() === now || (data.exists() && newData.val() === data.val())"
+        },
+        "finishedAt": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/gameState/currentTurn').val() === auth.uid",
+          ".validate": "newData.val() === now"
+        },
+
+        "players": {
+          "$uid": {
+            // You seat and unseat yourself; the host may clear a seat.
+            ".write": "auth != null && (($uid === auth.uid && (data.exists() || root.child('rooms/' + $roomId + '/status').val() === 'waiting')) || (!newData.exists() && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid))",
+            ".validate": "newData.hasChildren(['uid', 'displayName', 'score', 'isReady', 'joinedAt'])",
+
+            "uid": { ".validate": "newData.val() === $uid" },
+            "displayName": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+            },
+            "photoURL": { ".validate": "newData.isString() && newData.val().length <= 500" },
+            // A point at a time, and only by the player whose turn it is.
+            "score": {
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (newData.val() === data.val() + 1 && root.child('rooms/' + $roomId + '/status').val() === 'playing' && root.child('rooms/' + $roomId + '/gameState/currentTurn').val() === auth.uid))"
+            },
+            "isReady": { ".validate": "newData.isBoolean()" },
+            "joinedAt": { ".validate": "newData.isNumber() && newData.val() <= now + 5000" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "gameState": {
+          // The host deals once; after that only the player holding the turn may
+          // touch the board. The two exceptions are below: an expired turn may be
+          // passed by anyone still at the table.
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists() && ((!data.exists() && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid) || data.child('currentTurn').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['cards', 'currentTurn', 'matchedPairs', 'totalPairs', 'turnStartedAt'])",
+
+          "cards": { ".validate": "newData.hasChildren()" },
+          "currentTurn": {
+            ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists() && now > root.child('rooms/' + $roomId + '/gameState/turnStartedAt').val() + 45000",
+            ".validate": "newData.isString() && root.child('rooms/' + $roomId + '/players/' + newData.val()).exists()"
+          },
+          "turnStartedAt": {
+            ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists() && now > root.child('rooms/' + $roomId + '/gameState/turnStartedAt').val() + 45000",
+            ".validate": "newData.val() === now"
+          },
+          "flippedCards": {
+            // Two cards a turn. Index '2' existing would mean a third.
+            ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists() && now > root.child('rooms/' + $roomId + '/gameState/turnStartedAt').val() + 45000",
+            ".validate": "!newData.hasChild('2')",
+            "$index": { ".validate": "newData.isString() && newData.val().length <= 64" }
+          },
+          "matchedPairs": {
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || newData.val() === data.val() + 1)"
+          },
+          "totalPairs": {
+            ".validate": "newData.isNumber() && newData.val() > 0 && (!data.exists() || newData.val() === data.val())"
+          },
+          "$other": { ".validate": false }
+        },
+
+        "$other": { ".validate": false }
+      }
+    },
+
+    // Matchmaking index: which public rooms are open, bucketed by what they play.
+    // Quick match reads one bucket rather than every room ever created.
+    "openRooms": {
+      "$bucket": {
+        ".read": "auth != null",
+        "$roomId": {
+          // Published by someone seated in the public room it points at; retracted
+          // by anyone, since a pointer to a dealt or deleted room is only litter.
+          ".write": "auth != null && ((newData.exists() && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists() && root.child('rooms/' + $roomId + '/isPrivate').val() === false) || !newData.exists())",
+          ".validate": "newData.isBoolean() && newData.val() === true"
+        }
+      }
+    }
+  }
+}

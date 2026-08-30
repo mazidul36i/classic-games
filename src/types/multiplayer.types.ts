@@ -8,7 +8,6 @@ export interface RoomPlayer {
   photoURL?: string;
   score: number;
   isReady: boolean;
-  isCurrentTurn: boolean;
   joinedAt: number;
 }
 

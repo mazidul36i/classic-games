@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import {
   subscribeToRoom,
+  subscribeToServerTimeOffset,
   flipCard,
   resolveFlip,
+  passTurn,
+  nextPlayerUid,
   incrementPlayerScore,
   setPlayerReady,
-  leaveRoom
+  leaveRoom,
+  armLastSeatDisconnect,
+  disarmLastSeatDisconnect,
+  TURN_LIMIT_MS,
+  TURN_GRACE_MS,
 } from "../firebase/realtime";
 import type { Room, RoomPlayer } from "../types/multiplayer.types";
 import type { CardItem } from "../types/game.types";
@@ -13,7 +20,11 @@ import type { CardItem } from "../types/game.types";
 export const useMultiplayer = (roomId: string | null, currentUid: string | null) => {
   const [room, setRoom] = useState<Room | null>(null);
   const [loadedRoomId, setLoadedRoomId] = useState<string | null>(null);
+  const [serverOffset, setServerOffset] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const unsubRef = useRef<(() => void) | null>(null);
+  const passedTurnRef = useRef<number | null>(null);
+  const lastSeatArmedRef = useRef(false);
 
   useEffect(() => {
     if (!roomId) return;
@@ -27,13 +38,69 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     };
   }, [roomId]);
 
+  // Turn deadlines are stamped by the server; this is how far off this device is.
+  useEffect(() => subscribeToServerTimeOffset(setServerOffset), []);
+
   const loading = Boolean(roomId) && loadedRoomId !== roomId;
   const activeRoom = loadedRoomId === roomId ? room : null;
+
+  const isPlaying = activeRoom?.status === "playing";
+  const gameState = activeRoom?.gameState ?? null;
+  const turnStartedAt = gameState?.turnStartedAt ?? 0;
+
+  // Only tick while there is a clock to draw.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, [isPlaying]);
+
+  const turnElapsed = turnStartedAt ? nowMs + serverOffset - turnStartedAt : 0;
+  const secondsLeft =
+    isPlaying && turnStartedAt
+      ? Math.max(0, Math.ceil((TURN_LIMIT_MS - turnElapsed) / 1000))
+      : null;
+
+  /* Nobody is going to come back to a turn that ran out. Anyone still at the
+     table may move it on — the rules permit this write only once the clock has
+     actually expired, so it cannot be used to jump a live turn. Every client
+     tries; the first one wins and the rest are refused, which is fine. */
+  useEffect(() => {
+    if (!roomId || !currentUid || !isPlaying || !gameState || !activeRoom) return;
+    if (!activeRoom.players?.[currentUid]) return;
+    if (turnElapsed <= TURN_LIMIT_MS + TURN_GRACE_MS) return;
+    if (passedTurnRef.current === turnStartedAt) return;
+
+    const next = nextPlayerUid(activeRoom.players, gameState.currentTurn);
+    if (next === gameState.currentTurn) return; // last player standing keeps it
+
+    passedTurnRef.current = turnStartedAt;
+    passTurn(roomId, next).catch(() => {
+      /* someone else's pass landed first */
+    });
+  }, [roomId, currentUid, isPlaying, gameState, activeRoom, turnElapsed, turnStartedAt]);
+
+  /* A private room is indexed nowhere, so if the last player's tab closes there
+     is no one left who could ever find it to clear it. Have them take it with
+     them. Public rooms stay: an empty open room is still a joinable one. */
+  useEffect(() => {
+    if (!roomId || !activeRoom || !currentUid) return;
+    const seated = Object.keys(activeRoom.players ?? {});
+    const alone = seated.length === 1 && seated[0] === currentUid;
+    const shouldArm = alone && activeRoom.isPrivate;
+
+    if (shouldArm && !lastSeatArmedRef.current) {
+      lastSeatArmedRef.current = true;
+      armLastSeatDisconnect(roomId).catch(() => {});
+    } else if (!shouldArm && lastSeatArmedRef.current) {
+      lastSeatArmedRef.current = false;
+      disarmLastSeatDisconnect(roomId).catch(() => {});
+    }
+  }, [roomId, activeRoom, currentUid]);
 
   const handleFlipCard = async (cardId: string) => {
     if (!roomId || !activeRoom || !currentUid) return;
     const gs = activeRoom.gameState;
-    console.log("game state", gs);
     if (!gs) return;
     if (gs.currentTurn !== currentUid) return;
     if (gs.flippedCards?.length >= 2) return;
@@ -61,11 +128,7 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
           return c;
         });
 
-        // Determine next turn
-        const playerUids = Object.keys(activeRoom.players);
-        const currentIdx = playerUids.indexOf(currentUid);
-        const nextUid = playerUids[(currentIdx + 1) % playerUids.length];
-
+        const nextUid = nextPlayerUid(activeRoom.players, currentUid);
         const newMatchedPairs = gs.matchedPairs + (matched ? 1 : 0);
         const isComplete = newMatchedPairs >= gs.totalPairs;
 
@@ -109,6 +172,8 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     myPlayer,
     isMyTurn,
     players,
+    secondsLeft,
+    turnLimitSeconds: Math.round(TURN_LIMIT_MS / 1000),
     handleFlipCard,
     handleReady,
     handleLeave,

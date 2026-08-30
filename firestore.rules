@@ -1,0 +1,99 @@
+// The Memory Parlour — Firestore rules.
+//
+// The Realtime Database rules (database.rules.json) cover the table itself;
+// these cover the record of it — profiles, history and the leaderboard. There
+// is no server on this plan, so a forged leaderboard row is only as hard to
+// write as these rules make it: see `validEntry` below.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // users/{uid} — a profile is readable by anyone signed in, and writable
+    // only by its owner. `email` and `createdAt` are pinned at creation so a
+    // player cannot quietly rewrite either later.
+    match /users/{uid} {
+      allow read: if signedIn();
+
+      allow create: if isOwner(uid)
+        && request.resource.data.email is string
+        && request.resource.data.createdAt is number;
+
+      allow update: if isOwner(uid)
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false;
+    }
+
+    // gameHistory/{id} — a permanent, append-only ledger. A client may add its
+    // own row and never touch another's; nobody edits or removes one.
+    match /gameHistory/{historyId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // leaderboard/{gameType}/scores/{entryId} — one row per player per board,
+    // the doc ID is `{uid}_{difficulty}` so a player can only ever name the
+    // row that is theirs. This makes the board tamper-*resistant*, not
+    // tamper-proof — someone with the console open can still submit a
+    // plausible score. That is the honest ceiling without a server (see
+    // ROADMAP.md Phase 5.1).
+    match /leaderboard/{gameType}/scores/{entryId} {
+
+      // A perfect run's score ceiling per board size, mirroring
+      // `calculateScore` in src/utils/cardUtils.ts (basePairs * 100, at zero
+      // penalty) and the Word Match twin in src/utils/wordUtils.ts.
+      function maxScoreFor(difficulty) {
+        return difficulty == '4x4' ? 800 : difficulty == '6x6' ? 1800 : 3200;
+      }
+
+      function validEntry() {
+        let d = request.resource.data;
+        return d.uid == request.auth.uid
+          && entryId == request.auth.uid + '_' + d.difficulty
+          && d.difficulty in ['4x4', '6x6', '8x8']
+          && d.displayName is string && d.displayName.size() > 0 && d.displayName.size() <= 40
+          && d.score is int && d.score >= 10 && d.score <= maxScoreFor(d.difficulty)
+          && d.moves is int && d.moves >= 0 && d.moves <= 1000
+          && d.timeSeconds is int && d.timeSeconds >= 0 && d.timeSeconds <= 7200;
+      }
+
+      allow read: if signedIn();
+
+      // A fresh row: any plausible score gets one shot at the board.
+      allow create: if signedIn() && validEntry()
+        && request.resource.data.completedAt == request.time;
+
+      // A standing row may only be replaced by a strictly higher score, and
+      // not sooner than a few seconds after the last write — a crude but real
+      // rate limit, expressible because rules can read the row being
+      // replaced. The one exception is a rename that touches nothing else:
+      // the player's own display name may update on an unbeaten row.
+      allow update: if signedIn() && validEntry() && (
+        (request.resource.data.score > resource.data.score
+          && request.resource.data.completedAt == request.time
+          && request.time.toMillis() - resource.data.completedAt.toMillis() > 3000)
+        ||
+        (request.resource.data.score == resource.data.score
+          && request.resource.data.moves == resource.data.moves
+          && request.resource.data.timeSeconds == resource.data.timeSeconds
+          && request.resource.data.completedAt == resource.data.completedAt)
+      );
+
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
