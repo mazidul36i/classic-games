@@ -11,11 +11,29 @@ import {
   leaveRoom,
   armLastSeatDisconnect,
   disarmLastSeatDisconnect,
+  creditRoundWin,
+  resetOwnScoreForNewRound,
+  seedNextRoundProposal,
+  proposeNextRound,
+  setNextRoundReady,
+  startNextRound,
   TURN_LIMIT_MS,
   TURN_GRACE_MS,
 } from "../firebase/realtime";
+import { generateCards } from "../utils/cardUtils";
+import { generateWordCards } from "../utils/wordUtils";
 import type { Room, RoomPlayer } from "../types/multiplayer.types";
-import type { CardItem } from "../types/game.types";
+import type { CardItem, CardTheme, Difficulty, GameType } from "../types/game.types";
+
+/** Highest score first, ties broken by uid so every client agrees on an order
+ *  without needing to compare notes. */
+const rankByScore = (players: Record<string, RoomPlayer>): RoomPlayer[] =>
+  Object.values(players ?? {}).sort(
+    (a, b) => b.score - a.score || a.uid.localeCompare(b.uid)
+  );
+
+const dealCards = (gameType: string, difficulty: Difficulty, theme: CardTheme): CardItem[] =>
+  gameType === "word-match" ? generateWordCards(difficulty) : generateCards(difficulty, theme);
 
 export const useMultiplayer = (roomId: string | null, currentUid: string | null) => {
   const [room, setRoom] = useState<Room | null>(null);
@@ -98,6 +116,65 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     }
   }, [roomId, activeRoom, currentUid]);
 
+  /* The round is over — whoever comes out ahead credits themselves the win.
+     Every client computes the same ranking from the same synced scores, so
+     only the one client sitting in first actually writes anything. */
+  const creditedRoundRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!roomId || !currentUid || !activeRoom) return;
+    if (activeRoom.status !== "round-finished") return;
+    if (creditedRoundRef.current === activeRoom.round) return;
+
+    const ranked = rankByScore(activeRoom.players);
+    if (ranked[0]?.uid !== currentUid) return;
+
+    creditedRoundRef.current = activeRoom.round;
+    const mine = activeRoom.players[currentUid];
+    creditRoundWin(roomId, currentUid, mine?.roundsWon ?? 0).catch(() => {
+      creditedRoundRef.current = null; // let a retry happen on the next tick
+    });
+  }, [roomId, currentUid, activeRoom]);
+
+  /* A fresh round starts everyone back at zero. The dealer can only ever zero
+     their own seat (see startNextRound), so every other seat notices `round`
+     has moved on and clears its own score to match. */
+  const lastSeenRoundRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!roomId || !currentUid || !activeRoom) return;
+    if (activeRoom.status !== "playing") return;
+    if (lastSeenRoundRef.current === activeRoom.round) return;
+    lastSeenRoundRef.current = activeRoom.round;
+
+    const mine = activeRoom.players[currentUid];
+    if (mine && mine.score !== 0) {
+      resetOwnScoreForNewRound(roomId, currentUid).catch(() => {});
+    }
+  }, [roomId, currentUid, activeRoom]);
+
+  /* Once everyone seated has agreed to the same proposal, the seat that held
+     the last turn deals it — the rules only trust that seat to open the next
+     round, the same way only the host may deal the first one. */
+  const dealtRoundRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!roomId || !currentUid || !activeRoom) return;
+    if (activeRoom.status !== "round-finished") return;
+    const proposal = activeRoom.nextRound;
+    if (!proposal) return;
+    if (activeRoom.gameState?.currentTurn !== currentUid) return;
+    if (dealtRoundRef.current === activeRoom.round) return;
+
+    const seated = Object.keys(activeRoom.players ?? {});
+    const allReady = seated.length >= 2 && seated.every((uid) => proposal.readyPlayers?.[uid]);
+    if (!allReady) return;
+
+    dealtRoundRef.current = activeRoom.round;
+    const cards = dealCards(proposal.gameType, proposal.difficulty, proposal.theme);
+    const firstPlayer = nextPlayerUid(activeRoom.players, currentUid);
+    startNextRound(roomId, currentUid, activeRoom.round, proposal, cards, firstPlayer).catch(() => {
+      dealtRoundRef.current = null;
+    });
+  }, [roomId, currentUid, activeRoom]);
+
   const handleFlipCard = async (cardId: string) => {
     if (!roomId || !activeRoom || !currentUid) return;
     const gs = activeRoom.gameState;
@@ -143,6 +220,18 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
           newMatchedPairs,
           isComplete
         );
+
+        if (isComplete) {
+          // Put the current settings on the table so there's something to
+          // agree to (or change) right away — nobody is agreed yet.
+          await seedNextRoundProposal(
+            roomId,
+            activeRoom.gameType,
+            activeRoom.difficulty,
+            activeRoom.theme,
+            Object.keys(activeRoom.players ?? {})
+          );
+        }
       }, 900);
     }
   };
@@ -150,6 +239,22 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
   const handleReady = async (isReady: boolean) => {
     if (!roomId || !currentUid) return;
     await setPlayerReady(roomId, currentUid, isReady);
+  };
+
+  /** Put up (or replace) a proposal for the next round. Proposing counts as
+   *  agreeing to your own proposal; everyone else's agreement resets. */
+  const handleProposeNextRound = async (
+    gameType: GameType,
+    difficulty: Difficulty,
+    theme: CardTheme
+  ) => {
+    if (!roomId || !currentUid) return;
+    await proposeNextRound(roomId, currentUid, gameType, difficulty, theme);
+  };
+
+  const handleNextRoundReady = async (ready: boolean) => {
+    if (!roomId || !currentUid) return;
+    await setNextRoundReady(roomId, currentUid, ready);
   };
 
   const handleLeave = async () => {
@@ -177,5 +282,7 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     handleFlipCard,
     handleReady,
     handleLeave,
+    handleProposeNextRound,
+    handleNextRoundReady,
   };
 };

@@ -9,6 +9,7 @@ import { generateCards } from "../utils/cardUtils";
 import { generateWordCards } from "../utils/wordUtils";
 import Card from "../components/game/Card";
 import type { RoomPlayer } from "../types/multiplayer.types";
+import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -16,6 +17,13 @@ const GAME_CARD: Record<string, { rank: string; suit: string; red: boolean; labe
   "card-flip": { rank: "A", suit: "♠", red: false, label: "Card Flip Match" },
   "word-match": { rank: "J", suit: "♥", red: true, label: "Word Match" },
 };
+
+const NEXT_GAME_OPTIONS: { id: GameType; label: string }[] = [
+  { id: "card-flip", label: "Card Flip" },
+  { id: "word-match", label: "Word Match" },
+];
+const NEXT_DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
+const NEXT_THEMES: CardTheme[] = ["colors", "emojis", "numbers", "animals", "symbols"];
 
 export default function MultiplayerRoom() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -34,9 +42,11 @@ export default function MultiplayerRoom() {
     handleFlipCard,
     handleReady,
     handleLeave,
+    handleProposeNextRound,
+    handleNextRoundReady,
   } = useMultiplayer(roomId ?? null, user?.uid ?? null);
 
-  const showResult = room?.status === "finished";
+  const roundOver = room?.status === "round-finished";
 
   const handleStart = async () => {
     if (!room || !roomId) return;
@@ -91,8 +101,18 @@ export default function MultiplayerRoom() {
   const allReady = players.length >= 2 && players.every((p) => p.isReady);
   const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
   const maxPlayers = room.maxPlayers ?? 4;
-  const winner = showResult ? sortedPlayers[0] : null;
+  const winner = roundOver ? sortedPlayers[0] : null;
   const game = GAME_CARD[room.gameType] ?? { rank: "?", suit: "✦", red: false, label: room.gameType };
+
+  const proposal = room.nextRound;
+  const nextGameType = proposal?.gameType ?? room.gameType;
+  const nextDifficulty = proposal?.difficulty ?? room.difficulty;
+  const nextTheme = proposal?.theme ?? room.theme;
+  const myNextReady = Boolean(user?.uid && proposal?.readyPlayers?.[user.uid]);
+  const readyCount = players.filter((p) => proposal?.readyPlayers?.[p.uid]).length;
+
+  const proposeNext = (gameType: GameType, difficulty: Difficulty, theme: CardTheme) =>
+    handleProposeNextRound(gameType, difficulty, theme);
 
   const boardCols = room.difficulty === "4x4" ? 4 : room.difficulty === "6x6" ? 6 : 8;
   const boardStyle: CSSProperties = {
@@ -120,7 +140,7 @@ export default function MultiplayerRoom() {
             Private Room
           </span>
           <div className="flex items-center gap-2">
-            {isHost && !showResult && (
+            {isHost && !roundOver && (
               <button onClick={handleCleanup} className="p-icon-btn" aria-label="Close the room">
                 <DoorOpen className="w-4.5 h-4.5" strokeWidth={1.75} />
               </button>
@@ -153,7 +173,7 @@ export default function MultiplayerRoom() {
             </span>
             <p className="p-engrave text-[1.1rem] text-ink-deep">{game.label}</p>
             <p className="p-tick text-ink-soft mt-1.5">
-              {room.difficulty.replace("x", "×")} · {room.theme} deck
+              Round {room.round} · {room.difficulty.replace("x", "×")} · {room.theme} deck
             </p>
           </div>
         </div>
@@ -182,6 +202,7 @@ export default function MultiplayerRoom() {
                 </p>
                 <p className="p-tick text-ink-soft mt-0.5">
                   {p.score} pts
+                  {room.round > 1 && ` · ${p.roundsWon} rounds`}
                   {room.status === "waiting" && (
                     <span className={p.isReady ? "text-felt" : "text-ink-soft"}>
                       {" · "}
@@ -286,67 +307,98 @@ export default function MultiplayerRoom() {
         </motion.div>
       )}
 
-      {/* ── The result ── */}
+      {/* ── Between rounds: the table stays seated ── */}
       <AnimatePresence>
-        {showResult && winner && (
+        {roundOver && winner && (
           <motion.div
-            className="p-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            className="p-panel mt-8 px-6 sm:px-8 py-8"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.4, ease: EASE }}
           >
-            <motion.div
-              role="dialog"
-              aria-modal="true"
-              aria-label="Result"
-              className="p-panel w-full max-w-[26rem] px-7 sm:px-9 pt-8 pb-9 text-center"
-              initial={{ scale: 0.9, opacity: 0, y: 18 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.94, opacity: 0 }}
-              transition={{ type: "spring", damping: 24, stiffness: 300 }}
-            >
-              <div className="p-rule-double pt-3 pb-6">
-                <span className="p-suits flex items-center justify-center gap-3 text-[1.3rem]" aria-hidden="true">
-                  <span className="text-ink-deep">♠</span>
-                  <span className="text-vermilion">♥</span>
-                  <span className="text-vermilion">♦</span>
-                  <span className="text-ink-deep">♣</span>
-                </span>
-              </div>
-
-              <span className="p-tick text-vermilion">The house declares</span>
-              <h2 className="p-display text-[1.9rem] leading-[1.1] mt-4 mb-7">
-                {winner.uid === user?.uid ? "The hand is yours." : `${winner.displayName} takes it.`}
+            <div className="text-center">
+              <span className="p-tick text-vermilion">Round {room.round}</span>
+              <h2 className="p-display text-[1.7rem] leading-[1.15] mt-3 mb-6">
+                {winner.uid === user?.uid ? "You took that round." : `${winner.displayName} took that round.`}
               </h2>
+            </div>
 
-              <ol className="text-left mb-8">
-                {sortedPlayers.map((p, i) => (
-                  <li
-                    key={p.uid}
-                    className="flex items-center justify-between gap-4 py-3 p-rule"
+            <ol className="text-left mb-8 max-w-[26rem] mx-auto">
+              {sortedPlayers.map((p, i) => (
+                <li key={p.uid} className="flex items-center justify-between gap-4 py-3 p-rule">
+                  <span className="flex items-center gap-3">
+                    <span className={`p-rank ${i === 0 ? "p-rank-top" : ""}`}>{i + 1}</span>
+                    <span className="p-engrave text-[1.05rem] text-ink-deep">{p.displayName}</span>
+                  </span>
+                  <span className="p-tick text-ink-soft">
+                    {p.score} pts this round
+                    <span className="p-figure text-[1.1rem] text-ink-deep ml-3">{p.roundsWon} won</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="p-rule pt-7 max-w-[30rem] mx-auto">
+              <p className="p-tick text-ink-soft mb-4 text-center">What's next</p>
+
+              <div className="grid grid-cols-2 gap-2.5 mb-4">
+                {NEXT_GAME_OPTIONS.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => proposeNext(g.id, nextDifficulty, nextTheme)}
+                    aria-pressed={nextGameType === g.id}
+                    className={`p-opt ${nextGameType === g.id ? "p-opt-on" : ""}`}
                   >
-                    <span className="flex items-center gap-3">
-                      <span className={`p-rank ${i === 0 ? "p-rank-top" : ""}`}>{i + 1}</span>
-                      <span className="p-engrave text-[1.05rem] text-ink-deep">{p.displayName}</span>
-                    </span>
-                    <span className="p-figure text-[1.1rem]">{p.score}</span>
-                  </li>
-                ))}
-              </ol>
-
-              <div className="flex flex-col gap-3">
-                <button onClick={() => navigate("/lobby")} className="p-btn p-btn-solid p-btn-block">
-                  Back to the table
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-                {isHost && (
-                  <button onClick={handleCleanup} className="p-btn p-btn-outline p-btn-block">
-                    Close the room
+                    {g.label}
                   </button>
-                )}
+                ))}
               </div>
-            </motion.div>
+
+              <div className="flex gap-2.5 mb-4">
+                {NEXT_DIFFICULTIES.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => proposeNext(nextGameType, d, nextTheme)}
+                    aria-pressed={nextDifficulty === d}
+                    className={`p-opt flex-1 ${nextDifficulty === d ? "p-opt-on" : ""}`}
+                  >
+                    {d.replace("x", "×")}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-2.5 mb-7">
+                {NEXT_THEMES.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => proposeNext(nextGameType, nextDifficulty, t)}
+                    aria-pressed={nextTheme === t}
+                    className={`p-opt ${nextTheme === t ? "p-opt-on" : ""}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-[0.92rem] text-ink-soft text-center mb-5">
+                {readyCount >= players.length && players.length >= 2
+                  ? "Everyone's agreed — dealing the next round…"
+                  : `${readyCount}/${players.length} agreed to play this next.`}
+              </p>
+
+              <div className="flex flex-wrap gap-4 justify-center">
+                <button
+                  onClick={() => handleNextRoundReady(!myNextReady)}
+                  className={`p-btn ${myNextReady ? "p-btn-outline" : "p-btn-solid"}`}
+                >
+                  {myNextReady ? "Not so fast" : "Agree — deal me in"}
+                </button>
+                <button onClick={handleCleanup} className="p-btn p-btn-outline">
+                  End the session
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

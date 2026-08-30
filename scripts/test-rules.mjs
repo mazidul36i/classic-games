@@ -74,6 +74,7 @@ const seat = (uid, name) => ({
   displayName: name,
   photoURL: '',
   score: 0,
+  roundsWon: 0,
   isReady: false,
   joinedAt: Date.now(),
 });
@@ -85,6 +86,7 @@ const room = (hostUid, isPrivate) => ({
   gameType: 'card-flip',
   difficulty: '4x4',
   theme: 'emojis',
+  round: 1,
   players: { [hostUid]: seat(hostUid, 'Alice') },
   createdAt: SV,
 });
@@ -142,7 +144,11 @@ const run = async () => {
   await check('an idle player cannot seize the turn', 'deny', 'PUT', `rooms/${R}/gameState/currentTurn`, 'mallory', M);
   await check('matchedPairs cannot jump', 'deny', 'PUT', `rooms/${R}/gameState/matchedPairs`, 'alice', 8);
   await check('matchedPairs may rise by one', 'allow', 'PUT', `rooms/${R}/gameState/matchedPairs`, 'alice', 1);
-  await check('totalPairs is fixed at the deal', 'deny', 'PUT', `rooms/${R}/gameState/totalPairs`, 'alice', 99);
+  // totalPairs can change on the write that opens a fresh round (a new
+  // difficulty means a new pair count) — see "the next round" below — but an
+  // idle player still can't touch it mid-round; that's still gameState's own
+  // ".write", not this value check.
+  await check('an idle player cannot touch totalPairs mid-round', 'deny', 'PUT', `rooms/${R}/gameState/totalPairs`, 'mallory', 99);
   await check('the turn holder passes on', 'allow', 'PATCH', `rooms/${R}/gameState`, 'alice', { currentTurn: M, flippedCards: null, turnStartedAt: SV });
 
   console.log('\nscoring');
@@ -156,6 +162,70 @@ const run = async () => {
   await check('an expired turn may be passed by another player', 'allow', 'PATCH', `rooms/${R}/gameState`, 'alice', { currentTurn: A, flippedCards: null, turnStartedAt: SV });
   await req('PUT', `rooms/${R}/gameState/turnStartedAt`, 'ADMIN', Date.now() - 60_000);
   await check('the turn cannot be handed to a stranger', 'deny', 'PUT', `rooms/${R}/gameState/currentTurn`, 'alice', 'nobody');
+
+  console.log('\nthe next round');
+  const R2 = 'ROOMRR';
+  await req('PUT', `rooms/${R2}`, 'ADMIN', {
+    ...room(A, true),
+    status: 'playing',
+    round: 1,
+    players: { [A]: { ...seat(A, 'Alice'), score: 5 }, [M]: { ...seat(M, 'Mallory'), score: 3 } },
+    gameState: { cards, currentTurn: A, matchedPairs: 8, totalPairs: 8, turnStartedAt: SV },
+  });
+  await check('an outsider cannot propose before the round ends', 'deny', 'PUT', `rooms/${R2}/nextRound`, 'mallory', {
+    gameType: 'word-match', difficulty: '4x4', theme: 'emojis', readyPlayers: { [M]: true },
+  });
+  await check('anyone but the last turn holder cannot end the round', 'deny', 'PATCH', `rooms/${R2}`, 'mallory', { status: 'round-finished', finishedAt: SV });
+  await check('the last turn holder ends the round', 'allow', 'PATCH', `rooms/${R2}`, 'alice', { status: 'round-finished', finishedAt: SV });
+
+  await check('a stranger cannot credit alice a round win', 'deny', 'PUT', `rooms/${R2}/players/${A}/roundsWon`, 'mallory', 1);
+  await check('alice cannot award herself two rounds at once', 'deny', 'PUT', `rooms/${R2}/players/${A}/roundsWon`, 'alice', 2);
+  await check('alice — actually ahead on score — credits her own win', 'allow', 'PUT', `rooms/${R2}/players/${A}/roundsWon`, 'alice', 1);
+
+  await check('gameType cannot be changed directly between rounds', 'deny', 'PATCH', `rooms/${R2}`, 'alice', { gameType: 'word-match' });
+
+  const seedProposal = { gameType: 'word-match', difficulty: '6x6', theme: 'animals', readyPlayers: { [A]: false, [M]: false } };
+  await check('a seated player seeds the next-round proposal', 'allow', 'PUT', `rooms/${R2}/nextRound`, 'alice', seedProposal);
+  await check('mallory agrees to it', 'allow', 'PATCH', `rooms/${R2}/nextRound/readyPlayers`, 'mallory', { [M]: true });
+  await check('mallory cannot agree on alice’s behalf', 'deny', 'PATCH', `rooms/${R2}/nextRound/readyPlayers`, 'mallory', { [A]: true });
+  await check('mallory may withdraw her own agreement', 'allow', 'PATCH', `rooms/${R2}/nextRound/readyPlayers`, 'mallory', { [M]: false });
+  await check('a fresh proposal resets the table — alice re-proposes word-match', 'allow', 'PUT', `rooms/${R2}/nextRound`, 'alice', {
+    gameType: 'word-match', difficulty: '4x4', theme: 'colors', readyPlayers: { [A]: true },
+  });
+  await check('mallory agrees to the new proposal', 'allow', 'PATCH', `rooms/${R2}/nextRound/readyPlayers`, 'mallory', { [M]: true });
+
+  // Dealing is two writes, not one — see startNextRound in src/firebase/realtime.ts
+  // for why gameType/round can't land in the same write as the status flip.
+  // Flipping status alone isn't itself the gate (any seated player may do that
+  // much); the deal that follows is where an impostor actually gets refused.
+  await req('PUT', `rooms/${R2}/status`, 'ADMIN', 'playing');
+  await check('mallory cannot actually deal — she did not hold the last turn', 'deny', 'PATCH', `rooms/${R2}`, 'mallory', {
+    round: 2, gameType: 'word-match', difficulty: '4x4', theme: 'colors',
+    gameState: { cards, currentTurn: M, matchedPairs: 0, totalPairs: 8, turnStartedAt: SV },
+    nextRound: null,
+  });
+  await req('PUT', `rooms/${R2}/status`, 'ADMIN', 'round-finished');
+
+  await check('the last turn holder flips status to open the round', 'allow', 'PATCH', `rooms/${R2}`, 'alice', { status: 'playing', startedAt: SV });
+  await check('...then deals the agreed-on game, gameType and all', 'allow', 'PATCH', `rooms/${R2}`, 'alice', {
+    round: 2, gameType: 'word-match', difficulty: '4x4', theme: 'colors',
+    gameState: { cards, currentTurn: M, matchedPairs: 0, totalPairs: 8, turnStartedAt: SV },
+    nextRound: null,
+    [`players/${A}/score`]: 0,
+  });
+  await check('mallory zeroes her own carried-over score', 'allow', 'PUT', `rooms/${R2}/players/${M}/score`, 'mallory', 0);
+  await check('alice cannot zero mallory’s score for her', 'deny', 'PUT', `rooms/${R2}/players/${M}/score`, 'alice', 0);
+
+  console.log('\nending between rounds');
+  const R3 = 'ROOMEE';
+  await req('PUT', `rooms/${R3}`, 'ADMIN', {
+    ...room(A, true),
+    status: 'round-finished',
+    players: { [A]: seat(A, 'Alice'), [M]: seat(M, 'Mallory') },
+    gameState: { cards, currentTurn: A, matchedPairs: 8, totalPairs: 8, turnStartedAt: SV },
+  });
+  await check('an outsider cannot end the session', 'deny', 'DELETE', `rooms/${R3}`, undefined);
+  await check('any seated player — not just the host — may end it between rounds', 'allow', 'DELETE', `rooms/${R3}`, 'mallory');
 
   console.log('\nclosing the table');
   await check('a player cannot delete a room in play', 'deny', 'DELETE', `rooms/${R}`, 'mallory');

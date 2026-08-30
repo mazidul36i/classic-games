@@ -67,6 +67,7 @@ export default function GameLobby() {
     displayName: user!.displayName || "Player",
     photoURL: user!.photoURL || "",
     score: 0,
+    roundsWon: 0,
     isReady: false,
     joinedAt: Date.now(),
   });

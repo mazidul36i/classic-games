@@ -15,7 +15,7 @@ import {
   type DataSnapshot,
 } from 'firebase/database';
 import { rtdb } from './config';
-import type { Room, RoomPlayer, MultiplayerGameState } from '../types/multiplayer.types';
+import type { Room, RoomPlayer, MultiplayerGameState, NextRoundProposal } from '../types/multiplayer.types';
 import type { CardItem, GameType, Difficulty, CardTheme } from '../types/game.types';
 
 // ─── House limits ─────────────────────────────────────────────────────────────
@@ -95,6 +95,7 @@ export const createRoom = async (
     gameType,
     difficulty,
     theme,
+    round: 1,
     players: {
       [hostPlayer.uid]: hostPlayer,
     },
@@ -273,10 +274,122 @@ export const resolveFlip = async (
     [`rooms/${roomId}/gameState/turnStartedAt`]: serverTimestamp(),
   };
   if (isComplete) {
-    updates[`rooms/${roomId}/status`] = 'finished';
+    // The board is clear, but the table stays seated — see endRound below.
+    updates[`rooms/${roomId}/status`] = 'round-finished';
     updates[`rooms/${roomId}/finishedAt`] = serverTimestamp();
   }
   await update(ref(rtdb), updates);
+};
+
+/**
+ * Credit a round to whoever came out ahead. The rules can only confirm this is
+ * a player crediting *themselves*, once, while the room is between rounds —
+ * working out who actually won is left to the caller (every client computes
+ * the same ranking from the same synced scores, so this is only ever called
+ * by the one client whose own uid is in front).
+ */
+export const creditRoundWin = async (roomId: string, uid: string, currentRoundsWon: number) => {
+  await update(ref(rtdb, `rooms/${roomId}/players/${uid}`), {
+    roundsWon: currentRoundsWon + 1,
+  });
+};
+
+/** Each player zeroes their own card only — the rules won't let you touch a
+ *  seatmate's. Called once per player whenever a fresh round starts under them. */
+export const resetOwnScoreForNewRound = async (roomId: string, uid: string) => {
+  await update(ref(rtdb, `rooms/${roomId}/players/${uid}`), { score: 0 });
+};
+
+/**
+ * Called once, by whoever's move just ended the round, so there is something
+ * on the table to look at right away: the room's current settings, with
+ * nobody yet agreed to them (including the player who just dealt this in —
+ * proposing isn't the same as agreeing, so this doesn't call proposeNextRound).
+ */
+export const seedNextRoundProposal = async (
+  roomId: string,
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme,
+  seatedUids: string[]
+) => {
+  const proposal: NextRoundProposal = {
+    gameType,
+    difficulty,
+    theme,
+    readyPlayers: Object.fromEntries(seatedUids.map((uid) => [uid, false])),
+  };
+  await set(ref(rtdb, `rooms/${roomId}/nextRound`), proposal);
+};
+
+/**
+ * Put a proposal on the table for what to play next: any seated player may
+ * call this while the room sits at 'round-finished'. It replaces whatever was
+ * proposed before and starts the agreement over — you can only vouch for
+ * yourself, so proposing counts as agreeing to your own proposal.
+ */
+export const proposeNextRound = async (
+  roomId: string,
+  uid: string,
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme
+) => {
+  const proposal: NextRoundProposal = {
+    gameType,
+    difficulty,
+    theme,
+    readyPlayers: { [uid]: true },
+  };
+  await set(ref(rtdb, `rooms/${roomId}/nextRound`), proposal);
+};
+
+/** Agree (or withdraw agreement) to whatever is currently proposed. */
+export const setNextRoundReady = async (roomId: string, uid: string, ready: boolean) => {
+  await update(ref(rtdb, `rooms/${roomId}/nextRound/readyPlayers`), { [uid]: ready });
+};
+
+/**
+ * Deal the agreed-on next round. The rules only let the player who held the
+ * last turn make this write — same seat that closed out the round before it —
+ * so only that one client should ever call this, once every seated player's
+ * flag under `nextRound` is true.
+ */
+export const startNextRound = async (
+  roomId: string,
+  dealerUid: string,
+  currentRound: number,
+  proposal: Pick<NextRoundProposal, 'gameType' | 'difficulty' | 'theme'>,
+  cards: CardItem[],
+  firstPlayerUid: string
+) => {
+  const gameState = {
+    cards,
+    currentTurn: firstPlayerUid,
+    matchedPairs: 0,
+    totalPairs: cards.length / 2,
+    turnStartedAt: serverTimestamp(),
+  };
+  // Two writes, not one: gameType/difficulty/theme/round only get to move once
+  // status has *already* landed on 'playing' — the rules read that off the
+  // stored room, and a value this same write is also busy changing doesn't
+  // reliably show up yet to a sibling field's own check. Flip status first,
+  // then lay everything else on top of the now-settled 'playing' room.
+  await update(ref(rtdb, `rooms/${roomId}`), {
+    status: 'playing',
+    startedAt: serverTimestamp(),
+  });
+  await update(ref(rtdb), {
+    [`rooms/${roomId}/round`]: currentRound + 1,
+    [`rooms/${roomId}/gameType`]: proposal.gameType,
+    [`rooms/${roomId}/difficulty`]: proposal.difficulty,
+    [`rooms/${roomId}/theme`]: proposal.theme,
+    [`rooms/${roomId}/gameState`]: gameState,
+    [`rooms/${roomId}/nextRound`]: null,
+    // Only the dealer's own score is ours to zero here — the other seat zeroes
+    // itself the moment its client notices `round` has moved on.
+    [`rooms/${roomId}/players/${dealerUid}/score`]: 0,
+  });
 };
 
 /**

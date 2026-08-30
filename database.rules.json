@@ -27,7 +27,7 @@
         // Whole-room writes are creation and destruction only. Everything else
         // has to satisfy the per-field rules below.
         ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() === auth.uid) || (!newData.exists() && (data.child('hostId').val() === auth.uid || !data.child('players').exists() || (data.child('players').child(auth.uid).exists() && data.child('status').val() !== 'playing') || now > data.child('createdAt').val() + 21600000)))",
-        ".validate": "newData.hasChildren(['hostId', 'isPrivate', 'maxPlayers', 'status', 'gameType', 'difficulty', 'theme', 'players', 'createdAt'])",
+        ".validate": "newData.hasChildren(['hostId', 'isPrivate', 'maxPlayers', 'status', 'gameType', 'difficulty', 'theme', 'round', 'players', 'createdAt'])",
 
         "hostId": {
           ".validate": "newData.isString() && (!data.exists() || newData.val() === data.val())"
@@ -38,26 +38,57 @@
         "maxPlayers": {
           ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 4 && (!data.exists() || newData.val() === data.val())"
         },
+        // These three used to only ever be set once, at room creation, so they
+        // never needed a ".write" of their own — the create-time cascade from
+        // the whole-room rule above was enough. Dealing a new round now writes
+        // them again (right after the status flip lands, in the same write that
+        // replaces gameState — see startNextRound), so they need their own
+        // grant like "round" below, gated the same way: any seated player, with
+        // the actual legitimacy check left to ".validate".
         "gameType": {
-          ".validate": "(newData.val() === 'card-flip' || newData.val() === 'word-match') && (!data.exists() || newData.val() === data.val())"
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
+          ".validate": "(newData.val() === 'card-flip' || newData.val() === 'word-match') && (!data.exists() || newData.val() === data.val() || root.child('rooms/' + $roomId + '/status').val() === 'playing')"
         },
         "difficulty": {
-          ".validate": "(newData.val() === '4x4' || newData.val() === '6x6' || newData.val() === '8x8') && (!data.exists() || newData.val() === data.val())"
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
+          ".validate": "(newData.val() === '4x4' || newData.val() === '6x6' || newData.val() === '8x8') && (!data.exists() || newData.val() === data.val() || root.child('rooms/' + $roomId + '/status').val() === 'playing')"
         },
         "theme": {
-          ".validate": "newData.isString() && newData.val().length <= 20 && (!data.exists() || newData.val() === data.val())"
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
+          ".validate": "newData.isString() && newData.val().length <= 20 && (!data.exists() || newData.val() === data.val() || root.child('rooms/' + $roomId + '/status').val() === 'playing')"
         },
         "createdAt": {
           // Server-stamped, so the staleness sweep cannot be gamed by a bad clock.
           ".validate": "newData.val() === now || (data.exists() && newData.val() === data.val())"
         },
 
+        // A running count of rounds dealt in this room. It only ever moves by
+        // exactly one, and only on the same write that deals a round.
+        "round": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
+          ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 1) || newData.val() === data.val() || (newData.val() === data.val() + 1 && root.child('rooms/' + $roomId + '/status').val() === 'playing'))"
+        },
+
+        // No 'finished' value: ending the session for good is a room deletion
+        // (see the whole-room ".write" above, which already lets any seated
+        // player delete the room once status isn't 'playing'), not a status a
+        // client would ever read back.
         "status": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
-          ".validate": "(!data.exists() && newData.val() === 'waiting') || (data.val() === 'waiting' && newData.val() === 'playing' && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid) || (data.val() === 'playing' && newData.val() === 'finished' && root.child('rooms/' + $roomId + '/gameState/currentTurn').val() === auth.uid)"
+          // The round-finished -> playing branch doesn't itself check who is
+          // dealing — it can't cheaply see *last* round's turn holder once this
+          // same write also resets gameState/currentTurn to whoever deals first.
+          // gameState's own ".write" rule (below) already requires the write to
+          // come from whoever the old currentTurn was, so a deal that changes
+          // status without a legitimate matching gameState write is refused
+          // there instead; this branch only needs to confirm a seat, which the
+          // outer ".write" on this field already does.
+          ".validate": "(!data.exists() && newData.val() === 'waiting') || (data.val() === 'waiting' && newData.val() === 'playing' && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid) || (data.val() === 'playing' && newData.val() === 'round-finished' && root.child('rooms/' + $roomId + '/gameState/currentTurn').val() === auth.uid) || (data.val() === 'round-finished' && newData.val() === 'playing')"
         },
         "startedAt": {
-          ".write": "auth != null && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid",
+          // Written by whoever deals: the host for the first hand, or the
+          // player who held the last turn when opening the next round.
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
           ".validate": "newData.val() === now || (data.exists() && newData.val() === data.val())"
         },
         "finishedAt": {
@@ -69,16 +100,32 @@
           "$uid": {
             // You seat and unseat yourself; the host may clear a seat.
             ".write": "auth != null && (($uid === auth.uid && (data.exists() || root.child('rooms/' + $roomId + '/status').val() === 'waiting')) || (!newData.exists() && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid))",
-            ".validate": "newData.hasChildren(['uid', 'displayName', 'score', 'isReady', 'joinedAt'])",
+            ".validate": "newData.hasChildren(['uid', 'displayName', 'score', 'roundsWon', 'isReady', 'joinedAt'])",
 
             "uid": { ".validate": "newData.val() === $uid" },
             "displayName": {
               ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
             },
             "photoURL": { ".validate": "newData.isString() && newData.val().length <= 500" },
-            // A point at a time, and only by the player whose turn it is.
+            // A point at a time, and only by the player whose turn it is. The
+            // ownership rule above (only $uid may write their own seat) already
+            // means only a player can zero their own score, which is why the
+            // fresh-round reset below doesn't need to name who ends the last
+            // round — resetting your own score is, at worst, self-sabotage.
             "score": {
-              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (newData.val() === data.val() + 1 && root.child('rooms/' + $roomId + '/status').val() === 'playing' && root.child('rooms/' + $roomId + '/gameState/currentTurn').val() === auth.uid))"
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || (newData.val() === data.val() + 1 && root.child('rooms/' + $roomId + '/status').val() === 'playing' && root.child('rooms/' + $roomId + '/gameState/currentTurn').val() === auth.uid) || (newData.val() === 0 && root.child('rooms/' + $roomId + '/status').val() === 'playing'))"
+            },
+            // A round won. The ownership rule above already means only $uid may
+            // write it, so each client self-credits when the room agrees the
+            // round is over and it was the one who came out ahead — the rules
+            // can't see "ahead" (that needs comparing every seat at the table,
+            // which isn't expressible without a loop), so this trusts the
+            // client's own math the same way `score` already trusts a player not
+            // to fabricate their own local game state. It can only ever move by
+            // one, and only while the room is between rounds, so the worst a
+            // dishonest client can do is award itself a round it didn't win.
+            "roundsWon": {
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (newData.val() === data.val() + 1 && root.child('rooms/' + $roomId + '/status').val() === 'round-finished'))"
             },
             "isReady": { ".validate": "newData.isBoolean()" },
             "joinedAt": { ".validate": "newData.isNumber() && newData.val() <= now + 5000" },
@@ -108,11 +155,43 @@
             ".validate": "!newData.hasChild('2')",
             "$index": { ".validate": "newData.isString() && newData.val().length <= 64" }
           },
+          // Both zero out on the deal that opens a fresh round — a different
+          // difficulty next round can carry a different pair count, and the
+          // board always starts unmatched.
           "matchedPairs": {
-            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || newData.val() === data.val() + 1)"
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || newData.val() === data.val() + 1 || (newData.val() === 0 && root.child('rooms/' + $roomId + '/status').val() === 'playing'))"
           },
           "totalPairs": {
-            ".validate": "newData.isNumber() && newData.val() > 0 && (!data.exists() || newData.val() === data.val())"
+            ".validate": "newData.isNumber() && newData.val() > 0 && (!data.exists() || newData.val() === data.val() || root.child('rooms/' + $roomId + '/status').val() === 'playing')"
+          },
+          "$other": { ".validate": false }
+        },
+
+        // What the table is proposing to play next, between rounds. Any seated
+        // player may propose (overwrite the whole node) while the round is over;
+        // starting the round then copies these onto gameType/difficulty/theme
+        // above and clears this node.
+        //
+        // Known gap: nothing here stops a player from PATCHing just `gameType`
+        // without resetting `readyPlayers`, letting a stale agreement wave through
+        // a changed proposal. Real consensus enforcement — everyone at a table of
+        // up to four having agreed to *this* proposal — isn't something these
+        // rules can check without a loop construct RTDB rules don't have. The
+        // client always overwrites the whole node when proposing, and the UI only
+        // offers "deal" once every seated player's flag is true; a client that
+        // skips the app to hit the database directly could jump this, same as it
+        // already could nudge its own score by lying about game state elsewhere.
+        "nextRound": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists() && (root.child('rooms/' + $roomId + '/status').val() === 'round-finished' || !newData.exists())",
+          ".validate": "!newData.exists() || newData.hasChildren(['gameType', 'difficulty', 'theme', 'readyPlayers'])",
+
+          "gameType": { ".validate": "newData.val() === 'card-flip' || newData.val() === 'word-match'" },
+          "difficulty": { ".validate": "newData.val() === '4x4' || newData.val() === '6x6' || newData.val() === '8x8'" },
+          "theme": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "readyPlayers": {
+            // You may always declare your own readiness. You may only ever clear
+            // someone else's — never claim it on their behalf.
+            "$uid": { ".validate": "newData.isBoolean() && ($uid === auth.uid || newData.val() === false)" }
           },
           "$other": { ".validate": false }
         },
