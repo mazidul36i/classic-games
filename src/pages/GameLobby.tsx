@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Users, KeyRound } from "lucide-react";
+import { ArrowRight, Users, KeyRound, X } from "lucide-react";
 import PageHead from "../components/layout/PageHead";
 import { useAuth } from "../hooks/useAuth";
-import { createRoom, joinRoom, quickMatch } from "../firebase/realtime";
+import { useQuickMatch } from "../hooks/useQuickMatch";
+import { createRoom, joinRoom } from "../firebase/realtime";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 import type { RoomPlayer } from "../types/multiplayer.types";
 
@@ -29,6 +30,12 @@ const GAME_OPTIONS: {
 const DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
 const THEMES: CardTheme[] = ["colors", "emojis", "numbers", "animals", "symbols"];
 const VALID_GAME_TYPES: GameType[] = ["card-flip", "number-sequence", "pattern-memory", "word-match"];
+
+/** Elapsed time, as a table clock reads it. */
+const asClock = (ms: number) => {
+  const total = Math.floor(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+};
 
 const DIFFICULTY_NOTE: Record<Difficulty, string> = {
   "4x4": "Eight pairs — a short hand.",
@@ -56,11 +63,16 @@ export default function GameLobby() {
   const [roomCode, setRoomCode] = useState("");
   const [joining, setJoining] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [matching, setMatching] = useState(false);
   const [error, setError] = useState("");
 
+  const onMatched = useCallback(
+    (matchedRoomId: string) => navigate(`/room/${matchedRoomId}`),
+    [navigate]
+  );
+  const match = useQuickMatch(onMatched);
+
   const selectedGame = GAME_OPTIONS.find((g) => g.id === gameType)!;
-  const busy = creating || joining || matching;
+  const busy = creating || joining || match.searching;
 
   const asPlayer = (): RoomPlayer => ({
     uid: user!.uid,
@@ -115,7 +127,10 @@ export default function GameLobby() {
     try {
       const roomId = await createRoom(asPlayer(), gameType, difficulty, theme);
       navigate(`/room/${roomId}`);
-    } catch {
+    } catch (err) {
+      // A bare `catch {}` here once hid a PERMISSION_DENIED for days: the room
+      // never appeared and the UI only ever said "try again". Keep the reason.
+      console.error("[lobby] createRoom failed", err);
       setError("Failed to open a room. Try again.");
     } finally {
       setCreating(false);
@@ -144,28 +159,23 @@ export default function GameLobby() {
       } else {
         setError("No room answers to that code.");
       }
-    } catch {
+    } catch (err) {
+      console.error("[lobby] joinRoom failed", err);
       setError("Failed to join the room. Please try again.");
     } finally {
       setJoining(false);
     }
   };
 
-  const handleQuickMatch = async () => {
+  /* This does not resolve in one shot any more — the search runs for up to two
+     minutes and reports back through `match`. See useQuickMatch. */
+  const handleQuickMatch = () => {
     if (!isAuthenticated || !user) {
       sendToLogin(location.pathname + location.search);
       return;
     }
-    setMatching(true);
     setError("");
-    try {
-      const roomId = await quickMatch(asPlayer(), gameType, difficulty, theme);
-      navigate(`/room/${roomId}`);
-    } catch {
-      setError("Nobody at the table just now. Please try again.");
-    } finally {
-      setMatching(false);
-    }
+    void match.start(asPlayer(), gameType, difficulty, theme);
   };
 
   return (
@@ -303,20 +313,62 @@ export default function GameLobby() {
                 {!isAuthenticated && (
                   <div className="p-note mb-5">Sign in first — rooms are kept under your name.</div>
                 )}
-                {error && (
+                {(error || match.error) && (
                   <div className="p-alert mb-5" role="alert">
-                    {error}
+                    {error || match.error}
                   </div>
                 )}
 
-                <button
-                  onClick={handleQuickMatch}
-                  disabled={busy}
-                  className="p-btn p-btn-cream p-btn-block"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  {matching ? "Looking…" : "Find an opponent"}
-                </button>
+                {/* ── The search, while it runs ──
+                    A seat is genuinely open at a real table for as long as this
+                    clock is ticking, so the other half of the room can find it. */}
+                {match.searching ? (
+                  <div className="p-search" role="status" aria-live="polite">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <span className="p-tick">Dealing you in…</span>
+                      <span className="p-figure text-[1.4rem] text-paper">
+                        {asClock(match.elapsedMs)}
+                      </span>
+                    </div>
+
+                    <div className="p-search-track" aria-hidden="true">
+                      <span className="p-search-sweep" />
+                    </div>
+
+                    <p className="text-[0.92rem] leading-[1.7] text-paper/70 mb-5">
+                      A seat is open at your table — {selectedGame.label},{" "}
+                      {difficulty.replace("x", "×")}. We'll keep looking for{" "}
+                      {Math.round(match.timeoutSeconds / 60)} minutes, and you'll go
+                      straight to the table the moment someone sits down.
+                    </p>
+
+                    <button
+                      onClick={() => void match.cancel()}
+                      className="p-btn p-btn-outline p-btn-block"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Stop looking
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {match.phase === "timed-out" && (
+                      <div className="p-note mb-5">
+                        Nobody came to the table in{" "}
+                        {Math.round(match.timeoutSeconds / 60)} minutes. Try again, or
+                        open a private room and send the code to someone.
+                      </div>
+                    )}
+                    <button
+                      onClick={handleQuickMatch}
+                      disabled={busy}
+                      className="p-btn p-btn-cream p-btn-block"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      {match.phase === "timed-out" ? "Look again" : "Find an opponent"}
+                    </button>
+                  </>
+                )}
 
                 <div className="flex items-center gap-4 my-7">
                   <span className="flex-1 p-rule" />

@@ -112,7 +112,7 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
       armLastSeatDisconnect(roomId).catch(() => {});
     } else if (!shouldArm && lastSeatArmedRef.current) {
       lastSeatArmedRef.current = false;
-      disarmLastSeatDisconnect(roomId).catch(() => {});
+      disarmLastSeatDisconnect(roomId, currentUid).catch(() => {});
     }
   }, [roomId, activeRoom, currentUid]);
 

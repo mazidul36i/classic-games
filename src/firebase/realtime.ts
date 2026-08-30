@@ -17,6 +17,7 @@ import {
 import { rtdb } from './config';
 import type { Room, RoomPlayer, MultiplayerGameState, NextRoundProposal } from '../types/multiplayer.types';
 import type { CardItem, GameType, Difficulty, CardTheme } from '../types/game.types';
+import { pickOpponentRooms } from '../utils/matchUtils';
 
 // ─── House limits ─────────────────────────────────────────────────────────────
 //
@@ -33,8 +34,17 @@ export const TURN_GRACE_MS = 2_000;
 /** A waiting room older than this is abandoned; any signed-in client may sweep it. */
 export const ROOM_STALE_MS = 6 * 60 * 60 * 1000;
 
-/** How many open-room pointers a quick match will consider before opening its own. */
+/** How many open-room pointers a quick match will consider in one sweep. */
 const QUICK_MATCH_CANDIDATES = 8;
+
+/** How long "find an opponent" keeps looking before it gives up and clears the
+ *  table it was holding. */
+export const MATCH_TIMEOUT_MS = 120_000;
+
+/** How often the search re-reads the index while it waits. Two players who
+ *  press the button in the same second cannot see each other's table yet — this
+ *  is how long until they can. */
+export const MATCH_POLL_MS = 2_500;
 
 // ─── Room Management ──────────────────────────────────────────────────────────
 
@@ -142,41 +152,130 @@ export const joinRoom = async (roomId: string, player: RoomPlayer): Promise<Join
     return 'joined';
   }
   if (room.status !== 'waiting') return 'in-play';
-  if (Object.keys(room.players || {}).length >= (room.maxPlayers ?? 4)) return 'full';
+
+  const maxPlayers = room.maxPlayers ?? 4;
+  if (Object.keys(room.players || {}).length >= maxPlayers) return 'full';
 
   await update(ref(rtdb, `rooms/${roomId}/players`), {
     [player.uid]: player,
   });
   await armPlayerDisconnect(roomId, player.uid);
+
+  // Two players can clear the capacity check above in the same instant: the
+  // rules cap nothing (they can only see one seat at a time), and a transaction
+  // cannot span seats without giving every player write access to the whole
+  // `players` node. So take the seat first and check afterwards whether it was
+  // ours to take — `seatedOrder` ranks the table identically on every client,
+  // so the one who arrived last is the one who stands back up.
+  const seated = (await get(ref(rtdb, `rooms/${roomId}/players`))).val() as
+    | Record<string, RoomPlayer>
+    | null;
+  if (seatedOrder(seated ?? {}).indexOf(player.uid) >= maxPlayers) {
+    const seatRef = ref(rtdb, `rooms/${roomId}/players/${player.uid}`);
+    await onDisconnect(seatRef).cancel();
+    await remove(seatRef);
+    return 'full';
+  }
+
   return 'joined';
 };
 
-export const quickMatch = async (
+/** Open a table nobody has to know a code to find. */
+export const openQuickMatchRoom = (
   player: RoomPlayer,
   gameType: GameType,
   difficulty: Difficulty,
   theme: CardTheme
-): Promise<string> => {
+): Promise<string> =>
+  createRoom(player, gameType, difficulty, theme, { isPrivate: false, maxPlayers: 2 });
+
+/** Put our table back in the index. A sweep retracts any pointer it could not
+ *  sit down at, and it can be wrong about that (a room it read as full may have
+ *  emptied a moment later), so a table still waiting re-asserts its own. */
+export const publishOpenRoom = (
+  roomId: string,
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme
+) => set(openRoomRef(bucketKey(gameType, difficulty, theme), roomId), true);
+
+/**
+ * One pass over the matchmaking index: sit down at the first open table we can,
+ * clearing the pointers of any we cannot. Returns the room we joined, or null.
+ *
+ * `ownRoomId` is the table we are already holding open, if any; which of two
+ * tables that opened at the same moment gets abandoned is decided by
+ * `pickOpponentRooms`, which is where that reasoning lives.
+ */
+export const sweepForOpponent = async (
+  player: RoomPlayer,
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme,
+  ownRoomId: string | null
+): Promise<string | null> => {
   const bucket = bucketKey(gameType, difficulty, theme);
   const snap = await get(
     query(ref(rtdb, `openRooms/${bucket}`), limitToFirst(QUICK_MATCH_CANDIDATES))
   );
+  if (!snap.exists()) return null;
 
-  if (snap.exists()) {
-    for (const roomId of Object.keys(snap.val() as Record<string, boolean>)) {
-      const result = await joinRoom(roomId, player);
-      if (result === 'joined') return roomId;
-      // The room is gone or already dealt — the pointer has outlived it.
-      if (result === 'missing' || result === 'in-play') {
-        await remove(openRoomRef(bucket, roomId));
-      }
-    }
+  const candidates = pickOpponentRooms(
+    Object.keys(snap.val() as Record<string, boolean>),
+    ownRoomId
+  );
+
+  for (const roomId of candidates) {
+    const result = await joinRoom(roomId, player);
+    if (result === 'joined') return roomId;
+    // Dealt, gone, or full — whatever it is, it is not an open seat, and the
+    // pointer saying otherwise is only litter.
+    await remove(openRoomRef(bucket, roomId)).catch(() => {});
   }
 
-  return createRoom(player, gameType, difficulty, theme, {
-    isPrivate: false,
-    maxPlayers: 2,
-  });
+  return null;
+};
+
+/**
+ * A quick match holding a table on its own should take the whole thing with it
+ * if the tab closes — room and index pointer both. Otherwise the next searcher
+ * finds a pointer to a table nobody is sitting at and waits out its two minutes
+ * for a player who left.
+ */
+export const armSearchDisconnect = async (
+  roomId: string,
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme
+) => {
+  await onDisconnect(ref(rtdb, `rooms/${roomId}`)).remove();
+  await onDisconnect(openRoomRef(bucketKey(gameType, difficulty, theme), roomId)).remove();
+};
+
+/** Drop the standing instructions armed above. Used on the way to taking the
+ *  room down by hand, where re-arming the host's seat would be pointless. */
+export const cancelSearchDisconnect = async (
+  roomId: string,
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme
+) => {
+  await onDisconnect(ref(rtdb, `rooms/${roomId}`)).cancel();
+  await onDisconnect(openRoomRef(bucketKey(gameType, difficulty, theme), roomId)).cancel();
+};
+
+/** Stand the room back up once someone has joined it — it is a real table now.
+ *  `cancel()` reaches every onDisconnect at or below the path it is called on,
+ *  which includes the host's own seat, so that one has to be re-armed after. */
+export const disarmSearchDisconnect = async (
+  roomId: string,
+  uid: string,
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme
+) => {
+  await cancelSearchDisconnect(roomId, gameType, difficulty, theme);
+  await armPlayerDisconnect(roomId, uid);
 };
 
 /**
@@ -216,8 +315,12 @@ export const leaveRoom = async (roomId: string, uid: string) => {
 export const armLastSeatDisconnect = (roomId: string) =>
   onDisconnect(ref(rtdb, `rooms/${roomId}`)).remove();
 
-export const disarmLastSeatDisconnect = (roomId: string) =>
-  onDisconnect(ref(rtdb, `rooms/${roomId}`)).cancel();
+/** `cancel()` clears every onDisconnect at or below the path it is given, and
+ *  the player's own seat sits below the room — so put that one back. */
+export const disarmLastSeatDisconnect = async (roomId: string, uid: string) => {
+  await onDisconnect(ref(rtdb, `rooms/${roomId}`)).cancel();
+  await armPlayerDisconnect(roomId, uid);
+};
 
 export const setPlayerReady = async (roomId: string, uid: string, isReady: boolean) => {
   await update(ref(rtdb, `rooms/${roomId}/players/${uid}`), { isReady });

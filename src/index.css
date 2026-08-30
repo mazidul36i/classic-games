@@ -1306,6 +1306,39 @@ body {
 /* Figures column: unlayered, so it beats Tailwind's text-align utilities */
 .p-ledger .p-num { text-align: right; }
 
+/* ── Waiting for an opponent ── */
+.p-search {
+  border: 1px solid rgba(242, 236, 225, 0.28);
+  border-radius: 2px;
+  background: rgba(242, 236, 225, 0.06);
+  padding: 1.15rem 1.25rem 1.25rem;
+}
+
+.p-search-track {
+  position: relative;
+  height: 2px;
+  margin: 0.95rem 0 1rem;
+  background: rgba(242, 236, 225, 0.18);
+  overflow: hidden;
+}
+
+.p-search-sweep {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  background: var(--color-brass);
+  animation: parlour-search 1.6s ease-in-out infinite;
+}
+
+@keyframes parlour-search {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(363%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-search-sweep { animation: none; width: 100%; opacity: 0.45; }
+}
+
 /* Size and case modifiers — declared last so they beat the base primitives */
 .p-pip-lg { font-size: 1.5rem; }
 .p-tick-plain { text-transform: none; letter-spacing: 0.06em; }

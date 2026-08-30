@@ -137,7 +137,7 @@ export default function MultiplayerRoom() {
           <span className="p-engrave flex-1 text-center text-ink-deep text-[0.85rem] sm:text-[0.95rem] tracking-[0.14em] uppercase">
             <span className="hidden sm:inline">The Memory Parlour</span>
             <span className="text-vermilion mx-2 hidden sm:inline">✦</span>
-            Private Room
+            {room.isPrivate ? "Private Room" : "Quick Match"}
           </span>
           <div className="flex items-center gap-2">
             {isHost && !roundOver && (
@@ -227,7 +227,9 @@ export default function MultiplayerRoom() {
         <div className="p-panel mt-8 px-6 sm:px-8 py-8 text-center">
           <p className="text-[0.98rem] leading-[1.7] text-ink-soft max-w-[46ch] mx-auto mb-7">
             {players.length < 2
-              ? "Send the code above to whoever you want across the table — the game starts once two of you are seated."
+              ? room.isPrivate
+                ? "Send the code above to whoever you want across the table — the game starts once two of you are seated."
+                : "Your opponent has stepped away from the table. Wait a moment, or head back and look for another."
               : allReady
                 ? "Everyone is ready. The host may deal."
                 : "Every player marks themselves ready before the first card turns."}
