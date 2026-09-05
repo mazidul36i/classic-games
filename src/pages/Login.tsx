@@ -107,9 +107,18 @@ export default function Login() {
             </div>
 
             <div className="p-field">
-              <label className="p-label" htmlFor="login-password">
-                Password
-              </label>
+              <div className="flex items-baseline justify-between gap-4">
+                <label className="p-label" htmlFor="login-password">
+                  Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  state={email ? { email } : undefined}
+                  className="p-link text-ink-soft text-[0.78rem]"
+                >
+                  Forgotten it?
+                </Link>
+              </div>
               <input
                 id="login-password"
                 type="password"

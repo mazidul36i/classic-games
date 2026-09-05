@@ -4,6 +4,8 @@ import Layout from '../components/layout/Layout';
 import Home from '../pages/Home';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
+import ForgotPassword from '../pages/ForgotPassword';
+import ResetPassword from '../pages/ResetPassword';
 import Profile from '../pages/Profile';
 import Leaderboard from '../pages/Leaderboard';
 import GameLobby from '../pages/GameLobby';
@@ -33,6 +35,8 @@ export default function AppRoutes() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/auth/action" element={<ResetPassword />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route
             path="/profile"
