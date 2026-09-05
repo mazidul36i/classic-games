@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
-import { registerWithEmail, loginWithGoogle } from "../firebase/auth";
+import { registerWithEmail } from "../firebase/auth";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -36,6 +36,7 @@ export default function Register() {
     }
   };
 
+/*
   const handleGoogleLogin = async () => {
     setError("");
     setLoading(true);
@@ -48,6 +49,7 @@ export default function Register() {
       setLoading(false);
     }
   };
+*/
 
   return (
     <div className="relative z-10 max-w-[30rem] mx-auto px-5 sm:px-6 pt-6 pb-20">
