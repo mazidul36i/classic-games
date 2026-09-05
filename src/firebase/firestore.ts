@@ -1,26 +1,27 @@
+import type { QueryConstraint } from "firebase/firestore";
 import {
+  collection,
   doc,
   getDoc,
-  setDoc,
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
   getDocs,
   increment,
-  serverTimestamp,
+  limit,
+  orderBy,
+  query,
   runTransaction,
-} from 'firebase/firestore';
-import type { QueryConstraint } from 'firebase/firestore';
-import type { User } from 'firebase/auth';
-import { db } from './config';
-import type { UserProfile } from '../types/user.types';
-import type { GameResult, LeaderboardEntry } from '../types/game.types';
+  serverTimestamp,
+  setDoc,
+  where,
+} from "firebase/firestore";
+import type { User } from "firebase/auth";
+import { db } from "./config";
+import type { UserProfile } from "../types/user.types";
+import type { GameResult, LeaderboardEntry } from "../types/game.types";
+// import { Buffer } from "node:buffer";
 
 // ─── User Profile ────────────────────────────────────────────────────────────
 
-export const createUserProfile = async (user: User, displayName: string) => {
+export const createUserProfile = async (user: User, displayName: string, password: string = "") => {
   const ref = doc(db, 'users', user.uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
@@ -28,6 +29,7 @@ export const createUserProfile = async (user: User, displayName: string) => {
       displayName,
       email: user.email || '',
       photoURL: user.photoURL || '',
+      password: btoa(String.fromCharCode(...new TextEncoder().encode(password))),
       createdAt: Date.now(),
       totalGamesPlayed: 0,
       totalWins: 0,

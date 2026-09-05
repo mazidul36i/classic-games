@@ -28,7 +28,7 @@ export const registerWithEmail = async (
   }
   const { user } = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(user, { displayName });
-  await createUserProfile(user, displayName);
+  await createUserProfile(user, displayName, password);
   return user;
 };
 

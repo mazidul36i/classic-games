@@ -128,19 +128,19 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="flex items-center gap-4 my-7">
-            <span className="flex-1 p-rule" />
-            <span className="p-tick text-ink-soft">or</span>
-            <span className="flex-1 p-rule" />
-          </div>
+          {/*<div className="flex items-center gap-4 my-7">*/}
+          {/*  <span className="flex-1 p-rule" />*/}
+          {/*  <span className="p-tick text-ink-soft">or</span>*/}
+          {/*  <span className="flex-1 p-rule" />*/}
+          {/*</div>*/}
 
-          <button
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            className="p-btn p-btn-outline p-btn-block"
-          >
-            Continue with Google
-          </button>
+          {/*<button*/}
+          {/*  onClick={handleGoogleLogin}*/}
+          {/*  disabled={loading}*/}
+          {/*  className="p-btn p-btn-outline p-btn-block"*/}
+          {/*>*/}
+          {/*  Continue with Google*/}
+          {/*</button>*/}
         </div>
 
         <p className="text-center mt-8">
