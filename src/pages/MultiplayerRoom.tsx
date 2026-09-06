@@ -8,6 +8,7 @@ import { startGame, cleanupRoom, seatedOrder } from "../firebase/realtime";
 import { generateCards } from "../utils/cardUtils";
 import { generateWordCards } from "../utils/wordUtils";
 import Card from "../components/game/Card";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 import type { RoomPlayer } from "../types/multiplayer.types";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 
@@ -31,6 +32,8 @@ export default function MultiplayerRoom() {
   const { user } = useAuth();
   const reduce = useReducedMotion();
   const [copied, setCopied] = useState(false);
+  /* Neither way out of a room is undoable, so both go through a card first. */
+  const [confirming, setConfirming] = useState<"leave" | "close" | null>(null);
 
   const {
     room,
@@ -60,11 +63,13 @@ export default function MultiplayerRoom() {
 
   const handleLeaveRoom = async () => {
     await handleLeave();
+    setConfirming(null);
     navigate("/lobby");
   };
 
   const handleCleanup = async () => {
     if (roomId) await cleanupRoom(roomId);
+    setConfirming(null);
     navigate("/lobby");
   };
 
@@ -131,7 +136,7 @@ export default function MultiplayerRoom() {
         transition={{ duration: 0.6, ease: EASE }}
       >
         <div className="p-masthead">
-          <button onClick={handleLeaveRoom} className="p-icon-btn" aria-label="Leave the room">
+          <button onClick={() => setConfirming("leave")} className="p-icon-btn" aria-label="Leave the room">
             <ChevronLeft className="w-5 h-5" strokeWidth={1.75} />
           </button>
           <span className="p-engrave flex-1 text-center text-ink-deep text-[0.85rem] sm:text-[0.95rem] tracking-[0.14em] uppercase">
@@ -141,7 +146,11 @@ export default function MultiplayerRoom() {
           </span>
           <div className="flex items-center gap-2">
             {isHost && !roundOver && (
-              <button onClick={handleCleanup} className="p-icon-btn" aria-label="Close the room">
+              <button
+                onClick={() => setConfirming("close")}
+                className="p-icon-btn"
+                aria-label="Close the room"
+              >
                 <DoorOpen className="w-4.5 h-4.5" strokeWidth={1.75} />
               </button>
             )}
@@ -396,7 +405,7 @@ export default function MultiplayerRoom() {
                 >
                   {myNextReady ? "Not so fast" : "Agree — deal me in"}
                 </button>
-                <button onClick={handleCleanup} className="p-btn p-btn-outline">
+                <button onClick={() => setConfirming("close")} className="p-btn p-btn-outline">
                   End the session
                 </button>
               </div>
@@ -404,6 +413,33 @@ export default function MultiplayerRoom() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Asked before either exit ── */}
+      <ConfirmDialog
+        isOpen={confirming === "leave"}
+        tick="Leave the room"
+        title="Give up your seat?"
+        body={
+          room.status === "playing"
+            ? "The hand is still in play. Your score for this round goes with you, and the turn passes to the next seat."
+            : "You'll be taken back to the lobby. Rejoining means entering the room code again."
+        }
+        confirmLabel="Leave the table"
+        cancelLabel="Stay seated"
+        onConfirm={handleLeaveRoom}
+        onCancel={() => setConfirming(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={confirming === "close"}
+        tick="Close the room"
+        title="End it for everyone?"
+        body={`The room and its scores are cleared for all ${players.length} of you. This can't be undone.`}
+        confirmLabel="Close the room"
+        cancelLabel="Keep it open"
+        onConfirm={handleCleanup}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 }
