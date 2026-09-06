@@ -651,6 +651,37 @@ body {
 }
 .p-navlink-on { color: var(--color-ink-deep); background-size: 100% 2px; }
 
+/* ── The one sound control, in the nav ──
+   Borderless on purpose: .p-icon-btn is a 44px bordered box built for the felt
+   and the masthead, and one of those beside the 36px avatar turns the nav from
+   a masthead into a toolbar. This borrows .p-chat-mute's quieter language. */
+.p-nav-sound {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: rgba(91, 81, 69, 0.7);
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+
+@media (hover: hover) {
+  .p-nav-sound:hover { color: var(--color-ink-deep); }
+}
+
+/* Muted is a state worth seeing at a glance, not a dimmer icon. */
+.p-nav-sound-off { color: var(--color-vermilion); }
+
+.p-nav-sound:focus-visible {
+  outline: 2px solid var(--color-vermilion);
+  outline-offset: 2px;
+}
+
 /* ── Small letterpress buttons, for chrome and dense panels ── */
 .p-btn-sm {
   padding: 0.65rem 1.1rem;
@@ -1221,6 +1252,7 @@ body {
   .p-pad,
   .p-tile,
   .p-word,
+  .p-nav-sound,
   .p-navlink { transition-duration: 1ms; }
 }
 

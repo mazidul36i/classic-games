@@ -389,11 +389,37 @@ of earned marks — first perfect hand, ten days running, cleared the long night
 Cheap to add on top of counters that already exist, and it folds into that same
 transaction rather than adding writes.
 
-**3.5 Sound.** Four memory games with no audio. A short set of letterpress-ish
-cues — the card, the match, the miss — with a persisted mute toggle, adds a
-surprising amount of feel for a day's work. Keep the files tiny and let them
-cache: audio comes out of the same daily hosting transfer as the bundle, which
-2.1 is already trying to win back.
+**3.5 Sound — shipped.** Sixteen letterpress-ish cues — the card, the pair, the
+miss, the knuckle on wood when a life goes — with a mute toggle in the nav that
+is remembered on the device. The worry about hosting transfer largely went away:
+every cue is *synthesised* in `src/audio/engine.ts` from a filtered noise burst
+and an oscillator, so there are **no audio files at all** — the whole feature
+costs 2.4 kB gzipped of code and nothing per play, needs no licence, works
+offline, and is retuned by editing a number rather than re-recording.
+`src/audio/cues.ts` holds the recipes.
+
+The pips in the two sequence games are pitched on a minor pentatonic — sixteen
+distinct notes across Pattern Memory's board — so a figure plays back as a
+phrase instead of a machine gun, and pitching is by *cell* rather than by
+position so a resumed replay is not transposed against what the player just
+heard.
+
+The multiplayer table is the subtle part: nothing there is driven by a click,
+so the cues are read off transitions between room snapshots — which is also
+what keeps the actor and their opponents hearing the same thing at the same
+moment, with no second optimistic path to double-fire. Three shapes of the
+stored `gameState` had to be respected: `passTurn` clears `flippedCards`
+without touching `matchedPairs` (so a clock-out is `pass`, not a spurious
+`miss`), `startGame`/`startNextRound` rewrite `gameState` with no
+`flippedCards` key at all (so a card turning is a strict *growth* test), and
+`startNextRound` writes twice (so a turn moving on is only a turn *taken* when
+`round` has not also moved).
+
+Two things worth knowing. Audio is deliberately **not** tied to
+`prefers-reduced-motion` — that is a motion preference, and honouring it with
+silence would mute someone who only dislikes animation; the nav toggle is the
+audio control. And a hidden tab is silent except for the "your turn" bell,
+which is the one cue that exists to say you have to do something.
 
 **3.6 Table talk — shipped.** A chat beside the multiplayer board: free text
 plus a row of one-tap phrases for when the turn clock is running, a per-device

@@ -14,6 +14,7 @@ import {
 } from "../firebase/realtime";
 import type { RoomPlayer } from "../types/multiplayer.types";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
+import { play } from "../audio/cues";
 
 export type MatchPhase = "idle" | "searching" | "matched" | "timed-out" | "error";
 
@@ -125,6 +126,7 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
         search.unsubRoom?.();
         search.unsubRoom = null;
         setPhase("matched");
+        play("found");
         matchedRef.current(roomId);
       };
 
@@ -169,6 +171,7 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
             await teardown(search, true);
             searchRef.current = null;
             setPhase("timed-out");
+            play("bust");
             return;
           }
 
@@ -213,6 +216,7 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
             : "Something went wrong looking for an opponent."
         );
         setPhase("error");
+        play("wrong");
       }
     },
     [teardown]
