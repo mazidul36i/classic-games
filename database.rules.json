@@ -200,6 +200,33 @@
           "$other": { ".validate": false }
         },
 
+        // Table talk. A message is written once, by a seated player, as
+        // themselves, and never edited or deleted — the room takes its chat
+        // with it when it closes. Reading inherits the room's own rule (know
+        // the code, be signed in).
+        //
+        // Known gap: no rate limit. A per-player "last sent" stamp can't be
+        // checked from here, because rules can't see a sibling path written in
+        // the same multi-path update. The client waits a second between sends;
+        // a patched client could flood a table it is seated at, and nothing
+        // else. The 200 is mirrored as CHAT_MAX_LENGTH in src/firebase/realtime.ts.
+        "chat": {
+          "$msgId": {
+            ".write": "auth != null && !data.exists() && newData.exists() && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
+            ".validate": "newData.hasChildren(['uid', 'displayName', 'text', 'sentAt'])",
+
+            "uid": { ".validate": "newData.val() === auth.uid" },
+            "displayName": {
+              ".validate": "newData.isString() && newData.val() === root.child('rooms/' + $roomId + '/players/' + auth.uid + '/displayName').val()"
+            },
+            "text": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200"
+            },
+            "sentAt": { ".validate": "newData.val() === now" },
+            "$other": { ".validate": false }
+          }
+        },
+
         "$other": { ".validate": false }
       }
     },

@@ -25,6 +25,17 @@ export interface NextRoundProposal {
   readyPlayers: Record<string, boolean>;
 }
 
+/** One line of table talk, as stored under `rooms/{id}/chat/{pushId}`. Written
+ *  once and never edited; `sentAt` is server-stamped, so every client agrees
+ *  on the order. `displayName` is a snapshot — the author may have left the
+ *  table by the time someone scrolls back. */
+export interface ChatMessage {
+  uid: string;
+  displayName: string;
+  text: string;
+  sentAt: number;
+}
+
 export interface Room {
   id: string;
   hostId: string;
@@ -38,6 +49,7 @@ export interface Room {
   nextRound?: NextRoundProposal | null;
   players: Record<string, RoomPlayer>;
   gameState?: MultiplayerGameState;
+  chat?: Record<string, ChatMessage>;
   createdAt: number;
   startedAt?: number;
   finishedAt?: number;

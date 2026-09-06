@@ -331,6 +331,19 @@ of earned marks — first perfect hand, ten days running, cleared the long night
 Cheap to add on top of counters that already exist, and it folds into the same
 transaction as 0.2 rather than adding writes.
 
+**3.6 Table talk — shipped.** A chat beside the multiplayer board: free text
+plus a row of one-tap phrases for when the turn clock is running, a per-device
+mute for each seat, and a few lines the table writes itself (who sat down, who
+took the round). Messages live under `rooms/{id}/chat`, ride the room
+subscription that already exists (no new connection against the ceiling of
+100), and leave with the room when it closes, so there is nothing to sweep.
+The rules pin every message to a seated author, the name on their seat, the
+server's clock and 200 characters — `npm run test:rules` covers the deny
+cases. What they cannot do is rate-limit: a per-player "last sent" stamp can't
+be checked from a sibling path in the same write, so the one-second cooldown
+is client manners only. A patched client can flood a table it is seated at,
+and nothing else; that is the honest ceiling, same as `maxPlayers`.
+
 **3.5 Sound.** Four memory games with no audio. A short set of letterpress-ish
 cues — the card, the match, the miss — with a persisted mute toggle, adds a
 surprising amount of feel for a day's work. Keep the files tiny and let them

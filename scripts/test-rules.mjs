@@ -103,9 +103,10 @@ const PUB = 'ROOMBB';
 const BUCKET = 'card-flip_4x4_emojis';
 
 const run = async () => {
-  await Promise.all([signUp('alice'), signUp('mallory')]);
+  await Promise.all([signUp('alice'), signUp('mallory'), signUp('carol')]);
   const A = U.alice.uid;
   const M = U.mallory.uid;
+  const C = U.carol.uid; // signed in, never seated
 
   console.log('\nroom creation');
   await check('signed-out cannot create a room', 'deny', 'PUT', `rooms/${R}`, undefined, room(A, true));
@@ -127,6 +128,24 @@ const run = async () => {
   await check('a seat cannot smuggle extra fields', 'deny', 'PATCH', `rooms/${R}/players/${M}`, 'mallory', { isAdmin: true });
   await check('mallory marks herself ready', 'allow', 'PATCH', `rooms/${R}/players/${M}`, 'mallory', { isReady: true });
   await check('a seat cannot start with points on it', 'deny', 'PUT', `rooms/${R}/players/${M}`, 'mallory', { ...seat(M, 'M'), score: 7 });
+
+  console.log('\ntable talk');
+  const msg = (uid, displayName, text) => ({ uid, displayName, text, sentAt: SV });
+  await check('a seated player says something', 'allow', 'PUT', `rooms/${R}/chat/m1`, 'mallory', msg(M, 'Mallory', 'Good luck!'));
+  await check('signed-out cannot write to the chat', 'deny', 'PUT', `rooms/${R}/chat/m2`, undefined, msg(M, 'Mallory', 'hi'));
+  await check('a signed-in outsider cannot write to the chat', 'deny', 'PUT', `rooms/${R}/chat/m2`, 'carol', msg(C, 'Carol', 'hi'));
+  await check('a message cannot carry someone else’s uid', 'deny', 'PUT', `rooms/${R}/chat/m2`, 'mallory', msg(A, 'Alice', 'hi'));
+  await check('a message cannot carry a name other than the seat’s', 'deny', 'PUT', `rooms/${R}/chat/m2`, 'mallory', msg(M, 'Not Mallory', 'hi'));
+  await check('a client-stamped sentAt is refused', 'deny', 'PUT', `rooms/${R}/chat/m2`, 'mallory', { ...msg(M, 'Mallory', 'hi'), sentAt: Date.now() });
+  await check('an empty message is refused', 'deny', 'PUT', `rooms/${R}/chat/m2`, 'mallory', msg(M, 'Mallory', ''));
+  await check('a 200-character message is the most the table will take', 'allow', 'PUT', `rooms/${R}/chat/m3`, 'mallory', msg(M, 'Mallory', 'x'.repeat(200)));
+  await check('a 201-character message is refused', 'deny', 'PUT', `rooms/${R}/chat/m2`, 'mallory', msg(M, 'Mallory', 'x'.repeat(201)));
+  await check('a message cannot smuggle extra fields', 'deny', 'PUT', `rooms/${R}/chat/m2`, 'mallory', { ...msg(M, 'Mallory', 'hi'), isAdmin: true });
+  await check('a message cannot be rewritten once said', 'deny', 'PUT', `rooms/${R}/chat/m1`, 'mallory', msg(M, 'Mallory', 'Actually, bad luck.'));
+  await check('a message cannot be taken back', 'deny', 'DELETE', `rooms/${R}/chat/m1`, 'mallory');
+  await check('the host cannot strike a message either', 'deny', 'DELETE', `rooms/${R}/chat/m1`, 'alice');
+  await check('the chat is readable by anyone holding the code', 'allow', 'GET', `rooms/${R}/chat`, 'carol');
+  await check('signed-out cannot read the chat', 'deny', 'GET', `rooms/${R}/chat`, undefined);
 
   console.log('\nthe deal');
   await check('a guest cannot deal', 'deny', 'PATCH', `rooms/${R}`, 'mallory', { status: 'playing' });

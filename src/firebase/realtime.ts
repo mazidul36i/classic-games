@@ -9,13 +9,20 @@ import {
   query,
   limitToFirst,
   onDisconnect,
+  push,
   runTransaction,
   serverTimestamp,
   type DatabaseReference,
   type DataSnapshot,
 } from 'firebase/database';
 import { rtdb } from './config';
-import type { Room, RoomPlayer, MultiplayerGameState, NextRoundProposal } from '../types/multiplayer.types';
+import type {
+  Room,
+  RoomPlayer,
+  MultiplayerGameState,
+  NextRoundProposal,
+  ChatMessage,
+} from '../types/multiplayer.types';
 import type { CardItem, GameType, Difficulty, CardTheme } from '../types/game.types';
 import { pickOpponentRooms } from '../utils/matchUtils';
 
@@ -45,6 +52,14 @@ export const MATCH_TIMEOUT_MS = 120_000;
  *  press the button in the same second cannot see each other's table yet — this
  *  is how long until they can. */
 export const MATCH_POLL_MS = 2_500;
+
+/** The most a single line of table talk may hold. Mirrored in the rules'
+ *  `chat` clause — change them together. */
+export const CHAT_MAX_LENGTH = 200;
+
+/** How long the composer waits between sends. The rules cannot enforce this
+ *  (see the `chat` clause in database.rules.json), so it is only manners. */
+export const CHAT_COOLDOWN_MS = 1_000;
 
 // ─── Room Management ──────────────────────────────────────────────────────────
 
@@ -530,6 +545,29 @@ export const closeRoom = async (
 
 /** Kept for the host's "close the room" control. */
 export const cleanupRoom = (roomId: string) => closeRoom(roomId);
+
+// ─── Table talk ───────────────────────────────────────────────────────────────
+
+/**
+ * Say something at the table. The rules insist the message is written by a
+ * seated player, as themselves, under the name on their seat, with the server's
+ * clock — so `displayName` has to be what is on the seat, not what the auth
+ * profile says today. Messages live under the room and leave with it.
+ */
+export const sendChatMessage = async (
+  roomId: string,
+  uid: string,
+  displayName: string,
+  text: string
+) => {
+  const message: Omit<ChatMessage, 'sentAt'> & { sentAt: object } = {
+    uid,
+    displayName,
+    text,
+    sentAt: serverTimestamp(),
+  };
+  await set(push(ref(rtdb, `rooms/${roomId}/chat`)), message);
+};
 
 // ─── Real-time Subscriptions ──────────────────────────────────────────────────
 

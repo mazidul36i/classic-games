@@ -1358,3 +1358,283 @@ body {
 @media (min-width: 768px) {
   .p-opt-wide { display: inline-flex; }
 }
+
+/* ── Table talk: the chat beside the multiplayer board ── */
+.p-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-parchment);
+  border: 1px solid rgba(23, 19, 14, 0.55);
+  border-radius: 6px;
+  box-shadow: 6px 7px 0 rgba(23, 19, 14, 0.07);
+}
+
+/* Beside the board: as tall as the window allows, never taller than a page. */
+.p-chat-aside {
+  height: calc(100vh - 8rem);
+  max-height: 46rem;
+  min-height: 22rem;
+}
+
+.p-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1.1rem 0.75rem;
+  border-bottom: 1px solid rgba(23, 19, 14, 0.18);
+}
+
+.p-chat-close { width: 36px; height: 36px; }
+
+.p-chat-scroll {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.p-chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem 1.1rem;
+}
+
+.p-chat-empty {
+  margin: auto 0;
+  padding: 1rem 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  font-style: italic;
+  text-align: center;
+  color: var(--color-ink-soft);
+}
+
+/* What the table noticed, set small in the ticket voice */
+.p-chat-sys {
+  padding: 0.3rem 0;
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.62rem;
+  text-align: center;
+  color: var(--color-ink-soft);
+}
+
+.p-chat-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  max-width: 88%;
+}
+
+.p-chat-msg-own {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.p-chat-msg-grouped { margin-top: -0.3rem; }
+
+.p-chat-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.p-chat-meta .p-tick { font-size: 0.6rem; letter-spacing: 0.12em; }
+
+.p-chat-bubble {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid rgba(23, 19, 14, 0.28);
+  border-radius: 4px 4px 4px 1px;
+  background: var(--color-paper);
+  color: var(--color-ink-deep);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Your own lines are set in ink, the way the house prints its own notices */
+.p-chat-msg-own .p-chat-bubble {
+  background: var(--color-ink-deep);
+  border-color: var(--color-ink-deep);
+  color: var(--color-paper);
+  border-radius: 4px 4px 1px 4px;
+}
+
+.p-chat-mute {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.3rem;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: rgba(91, 81, 69, 0.55);
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+
+.p-chat-muted {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border-left: 3px solid rgba(23, 19, 14, 0.2);
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--color-ink-soft);
+}
+
+/* Offered when new talk has landed below the reader's scroll */
+.p-chat-nub {
+  position: absolute;
+  left: 50%;
+  bottom: 0.6rem;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--color-ink-deep);
+  border-radius: 999px;
+  background: var(--color-ink-deep);
+  color: var(--color-paper);
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.62rem;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--color-vermilion);
+}
+
+.p-chat-foot {
+  border-top: 1px solid rgba(23, 19, 14, 0.18);
+  padding: 0.75rem 1.1rem 0.95rem;
+}
+
+.p-chat-chips {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.35rem;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.p-chat-chips::-webkit-scrollbar { display: none; }
+
+.p-chat-chip {
+  flex: none;
+  min-height: 32px;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(23, 19, 14, 0.35);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-family: var(--font-tick);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.62rem;
+  cursor: pointer;
+  transition: border-color 200ms ease, color 200ms ease, background-color 200ms ease;
+}
+
+.p-chat-chip:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.p-chat-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.p-chat-compose .p-icon-btn { width: 40px; height: 40px; }
+
+.p-chat-note {
+  margin-top: -0.35rem;
+  padding: 0 1.1rem 0.75rem;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--color-ink-soft);
+}
+
+/* Drawn up from the bottom on anything narrower than the two-column table */
+.p-chat-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(23, 19, 14, 0.6);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.p-chat-sheet-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+}
+
+.p-chat-sheet {
+  height: min(78vh, 40rem);
+  border-radius: 10px 10px 0 0;
+  border-bottom: 0;
+  box-shadow: 0 -5px 0 rgba(193, 54, 31, 0.22);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* The count of what was said while the sheet was shut */
+.p-chat-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-vermilion);
+  color: var(--color-paper);
+  font-family: var(--font-tick);
+  font-size: 0.62rem;
+  line-height: 18px;
+  text-align: center;
+}
+
+@media (hover: hover) {
+  .p-chat-mute:hover { color: var(--color-vermilion); }
+  .p-chat-chip:hover {
+    border-color: var(--color-ink-deep);
+    color: var(--color-ink-deep);
+    background: var(--color-paper);
+  }
+}
+
+.p-chat-mute:focus-visible,
+.p-chat-chip:focus-visible,
+.p-chat-nub:focus-visible {
+  outline: 2px solid var(--color-vermilion);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-chat-mute,
+  .p-chat-chip { transition-duration: 1ms; }
+}

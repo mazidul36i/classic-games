@@ -1,14 +1,17 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { ArrowRight, Check, ChevronLeft, Copy, DoorOpen } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, Copy, DoorOpen, MessageSquare } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useMultiplayer } from "../hooks/useMultiplayer";
+import { useRoomChat } from "../hooks/useRoomChat";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { startGame, cleanupRoom, seatedOrder } from "../firebase/realtime";
 import { generateCards } from "../utils/cardUtils";
 import { generateWordCards } from "../utils/wordUtils";
 import Card from "../components/game/Card";
 import ConfirmDialog from "../components/common/ConfirmDialog";
+import RoomChat from "../components/multiplayer/RoomChat";
 import type { RoomPlayer } from "../types/multiplayer.types";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 
@@ -48,6 +51,21 @@ export default function MultiplayerRoom() {
     handleProposeNextRound,
     handleNextRoundReady,
   } = useMultiplayer(roomId ?? null, user?.uid ?? null);
+
+  // Table talk sits beside the board where there is room for a second column
+  // (Tailwind's xl, 80rem); anywhere narrower it is a sheet drawn up on demand.
+  const isWide = useMediaQuery("(min-width: 80rem)");
+  const [chatOpen, setChatOpen] = useState(false);
+  const chat = useRoomChat(room, user?.uid ?? null, isWide || chatOpen);
+
+  useEffect(() => {
+    if (!chatOpen || isWide) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setChatOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chatOpen, isWide]);
 
   const roundOver = room?.status === "round-finished";
 
@@ -128,8 +146,22 @@ export default function MultiplayerRoom() {
   const cardSize = room.difficulty === "8x8" ? "sm" : "fluid";
   const turnHolder = players.find((p) => p.uid === room.gameState?.currentTurn)?.displayName;
 
+  const chatPanel = (onClose?: () => void, className?: string) => (
+    <RoomChat
+      entries={chat.entries}
+      canSend={chat.canSend}
+      cooling={chat.cooling}
+      mutedUids={chat.mutedUids}
+      onSend={chat.send}
+      onToggleMute={chat.toggleMute}
+      onClose={onClose}
+      className={className}
+    />
+  );
+
   return (
-    <div className="relative z-10 max-w-[58rem] mx-auto px-5 sm:px-10 pt-6 pb-20">
+    <div className="relative z-10 max-w-[58rem] xl:max-w-[82rem] mx-auto px-5 sm:px-10 pt-6 pb-20 xl:grid xl:grid-cols-[minmax(0,1fr)_21rem] xl:gap-10 xl:items-start">
+      <div className="min-w-0">
       <motion.div
         initial={reduce ? false : { opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -160,6 +192,23 @@ export default function MultiplayerRoom() {
               aria-label={copied ? "Room code copied" : "Copy the room code"}
             >
               {copied ? <Check className="w-4.5 h-4.5" strokeWidth={1.75} /> : <Copy className="w-4 h-4" strokeWidth={1.75} />}
+            </button>
+            <button
+              onClick={() => setChatOpen(true)}
+              className="p-icon-btn relative xl:hidden"
+              aria-label={
+                chat.unread > 0
+                  ? `Open the chat, ${chat.unread} new`
+                  : "Open the chat"
+              }
+              aria-expanded={chatOpen}
+            >
+              <MessageSquare className="w-4.5 h-4.5" strokeWidth={1.75} />
+              {chat.unread > 0 && (
+                <span className="p-chat-badge" aria-hidden="true">
+                  {chat.unread > 9 ? "9+" : chat.unread}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -413,6 +462,48 @@ export default function MultiplayerRoom() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
+
+      {/* ── Table talk, beside the board where there is room ── */}
+      <motion.aside
+        className="hidden xl:block xl:sticky xl:top-24"
+        initial={reduce ? false : { opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.15, ease: EASE }}
+      >
+        {chatPanel(undefined, "p-chat-aside")}
+      </motion.aside>
+
+      {/* ── …and drawn up from the bottom everywhere else ── */}
+      <AnimatePresence>
+        {chatOpen && !isWide && (
+          <>
+            <motion.div
+              key="chat-backdrop"
+              className="p-chat-backdrop"
+              onClick={() => setChatOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              aria-hidden="true"
+            />
+            <motion.div
+              key="chat-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Table talk"
+              className="p-chat-sheet-wrap"
+              initial={reduce ? { opacity: 0 } : { y: "100%" }}
+              animate={reduce ? { opacity: 1 } : { y: 0 }}
+              exit={reduce ? { opacity: 0 } : { y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            >
+              {chatPanel(() => setChatOpen(false), "p-chat-sheet")}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ── Asked before either exit ── */}
       <ConfirmDialog
@@ -434,7 +525,7 @@ export default function MultiplayerRoom() {
         isOpen={confirming === "close"}
         tick="Close the room"
         title="End it for everyone?"
-        body={`The room and its scores are cleared for all ${players.length} of you. This can't be undone.`}
+        body={`The room, its scores and the table talk are cleared for all ${players.length} of you. This can't be undone.`}
         confirmLabel="Close the room"
         cancelLabel="Keep it open"
         onConfirm={handleCleanup}
