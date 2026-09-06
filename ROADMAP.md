@@ -5,10 +5,16 @@ without turning on billing.
 
 The design work is done and it is genuinely good: the Parlour theme is coherent,
 the reduced-motion handling is thorough, and the app looks like a product rather
-than a tutorial. The gap is underneath. The app is deployed publicly with its
-databases in test mode, one of the two multiplayer games deals the wrong deck,
-and — until the rules test that came with Phase 1 — there was no test covering any
-of it.
+than a tutorial. The gap used to be underneath: the app was deployed publicly with
+its databases in test mode, one of the two multiplayer games dealt the wrong deck,
+and nothing was tested. Phases 0 and 1 have since closed that. Both rule files are
+written and deployed, 105 rules assertions run against the emulator, the score
+write is one transaction, and Word Match multiplayer deals a word deck.
+
+What is left underneath is smaller and different in kind: two writes the client
+makes that the rules now refuse, a password field that should never have been
+stored, no unit test runner, and a first-load bundle that has grown rather than
+shrunk.
 
 **The constraint that shapes this plan: the project stays on the Firebase Spark
 (free) plan for now.** That rules out Cloud Functions entirely — including
@@ -35,11 +41,13 @@ has to be re-planned, not just postponed.
 
 **The ceilings that will actually bite, roughly, in the order they'll bite:**
 
-- **Hosting: ~360 MB of transfer per day.** The current build ships ~925 KB of
-  JavaScript, about 285 KB of it over the wire after compression, plus fonts.
-  That is somewhere near **1,000–1,200 cold visits a day** before the site stops
-  serving until tomorrow. This is why bundle splitting moved up the list — it is
-  no longer a performance nicety, it is how many people can visit.
+- **Hosting: ~360 MB of transfer per day.** The current build ships ~959 KB of
+  JavaScript, about 295 KB of it over the wire after compression, plus 11 KB of
+  CSS and the fonts. That is somewhere near **1,000–1,100 cold visits a day**
+  before the site stops serving until tomorrow. Note the direction: the bundle
+  has *grown* since this was first written, because chat and multi-round rooms
+  both landed in the entry chunk. This is why bundle splitting moved up the list
+  — it is no longer a performance nicety, it is how many people can visit.
 - **Realtime Database: 100 simultaneous connections.** That is the hard ceiling
   on concurrent multiplayer, and every open tab on a room page holds one.
 - **Firestore: 50k reads and 20k writes a day.** Comfortable at this scale, but
@@ -53,120 +61,122 @@ None of these are close today. All of them are reasons Phase 5 exists.
 ## Phase 0 — Close the holes
 
 Everything here is a correctness or safety bug in code that is live right now.
-None of it is more than a day's work, none of it costs anything, and all of it
-should ship before any new feature.
+Most of the original list has shipped; two new ones have opened since, and one of
+those is a direct consequence of the rules work.
 
-### 0.1 Write security rules — the one that matters
+### 0.1 Write security rules — **shipped**
 
-**Half done.** `database.rules.json` exists, is wired into `firebase.json`, and
-has `npm run test:rules` behind it (see Phase 1) — but it has not been deployed
-yet, and there is still no `firestore.rules`. So today, live:
+`database.rules.json` and `firestore.rules` both exist, are wired into
+`firebase.json`, and are deployed. The deployed Firestore rules match the repo
+exactly. Both files carry `npm run test:rules` behind them (see Phase 1), and the
+shape is the one this section originally called for: `users/{uid}` owner-write
+with `email` and `createdAt` immutable, `gameHistory` create-only and
+uid-pinned, `leaderboard` rows named `{uid}_{difficulty}` and validated, rooms
+readable only by code and writable only by a seated player.
 
-- anyone can write any score to `leaderboard/{gameType}/scores` — the board is
-  decorative, not a record
-- anyone can rewrite another player's `users/{uid}` profile and stats
-- rooms are still open until the Realtime Database rules are actually pushed
+**One thing to check before the next release:** `database.rules.json` has changed
+twice since it was last deployed together with a client — multi-round rooms and
+table talk both extended it. Rules and client still ship as one release, not two.
 
-Note that deploying the database rules and shipping the current client are one
-release, not two: the rules reject writes the old client makes (it stamps its own
-timestamps and scans `rooms` for a quick match), and the new client is written
-against the rules. Push them together.
+### 0.2 Make the score write atomic and rules-checked — **shipped**
 
-**Do:** write the Firestore half, then deploy both.
-Rules are free, and on this plan they are the *only* server-side thing in the
-system — so they carry more weight here than they would on a project with
-functions. Minimum viable shape:
+`saveGameResult` (`src/firebase/firestore.ts:60`) folds all three writes —
+history, leaderboard row, profile counters — into a single `runTransaction`.
+`submitLeaderboardScore` and `updateUserStats` are gone; a tab closed midway now
+leaves nothing behind rather than a profile out of step with the history.
 
-- `users/{uid}` — readable by anyone signed in, writable only by its owner, with
-  `email` and `createdAt` immutable after creation.
-- `gameHistory/{id}` — create-only, `request.resource.data.uid == request.auth.uid`,
-  no update or delete from any client.
-- `leaderboard/{gameType}/scores/{entryId}` — see 0.2. The document ID is already
-  `{uid}_{difficulty}`, which rules can check directly: a player can only write
-  the row that is named after them.
-- `rooms/{roomId}` — readable and writable only by a signed-in player already in
-  `players/`, `hostId` immutable after creation, `createdAt` pinned to `now`.
-
-Test them with the emulator (`firebase emulators:start`, free) before deploying,
-because a rules mistake here is silent in exactly the same way the missing rules
-are today.
-
-### 0.2 Make the score write atomic and rules-checked
-
-`saveGameResult` (`src/firebase/firestore.ts:71`) writes three things: the
-history document, then the leaderboard row, then the user's counters — three
-separate round trips, of which only the leaderboard write is transactional. A tab
-closed between call one and call three leaves the profile permanently out of step
-with the history.
-
-The old plan moved this to a Cloud Function. Without one, the free answer is to
-do it properly on the client and let the rules do the checking:
-
-**Do (client):** fold all three writes into a single `runTransaction`. Firestore
-transactions span documents — read the leaderboard row first, then write the
-history doc, the leaderboard row and the profile counters together. The
-read-then-write pattern is already in `submitLeaderboardScore`
-(`src/firebase/firestore.ts:98`); this is that pattern widened.
-
-**Do (rules):** make a forged row as expensive as possible to write.
-
-- the entry ID must equal `{request.auth.uid}_{difficulty}`, and `uid` must match
-  the caller
-- a row may only be replaced by a **higher** score, so an attacker gets one shot
-  at a plausible number rather than free rein over the board
-- `score`, `moves` and `timeSeconds` must be integers inside sane bounds for
-  their game and difficulty — a perfect 4×4 has a known ceiling
-- `completedAt == request.time`, and at least a few seconds after the row's
-  previous `completedAt` — a crude but real rate limit, and rules can express it
-  because they can read the document being replaced
+The rules half shipped with it: the entry ID must equal
+`{request.auth.uid}_{difficulty}`, a standing row may only be replaced by a
+strictly higher score, `completedAt == request.time` with a three-second floor
+between writes, and `score` is bounded by a per-difficulty ceiling that mirrors
+`calculateScore`. A rename on an unbeaten row is the one permitted no-op update.
 
 **Be honest about the ceiling:** this makes the board *tamper-resistant*, not
 *authoritative*. Someone with the browser console open can still submit a score
 that is merely plausible. That is an acceptable trade for a hobby leaderboard,
 and it is the best argument for Phase 5.1 the day it stops being one.
 
-### 0.3 Word Match multiplayer deals the wrong game
+### 0.3 Word Match multiplayer deals the wrong game — **shipped**
 
-`MultiplayerRoom.handleStart` calls `generateCards(room.difficulty, room.theme)`
-(`src/pages/MultiplayerRoom.tsx:32`) regardless of `room.gameType`. A Word Match
-room is dealt an emoji or colour deck: the lobby offers the mode, the room says
-"Word Match", and the board is Card Flip. Multiplayer for this game has never
-actually worked.
+`generateWordCards` lives in `src/utils/wordUtils.ts`, and both the room page and
+`useMultiplayer` pick the generator by `gameType` (`src/hooks/useMultiplayer.ts:35`).
+A Word Match room is dealt a word deck.
 
-**Do:** lift `generateWordCards` out of `WordMatchPage.tsx` into
-`src/utils/wordUtils.ts` and pick the generator by `gameType`. This is the single
-highest-value-per-hour fix in the list — it doubles the working multiplayer
-catalogue in about an hour, and costs nothing but the hour.
+### 0.4 Word Match 8×8 is a lie — **shipped**
 
-### 0.4 Word Match 8×8 is a lie
+`WORD_PAIRS` holds 32 entries and `getWordPairsCount` returns 8 / 18 / 32. "The
+long night" deals a real 8×8 board.
 
-`generateWordCards` reads `difficulty === "4x4" ? 8 : difficulty === "6x6" ? 18 : 18`
-(`src/pages/WordMatchPage.tsx:41`), and `WORD_PAIRS` only holds 18 entries.
-Choosing "the long night" silently deals the 6×6 board.
+### 0.5 A leaver freezes the room forever — **shipped**
 
-**Do:** either extend the word list to 32 pairs, or hide 8×8 for Word Match in the
-lobby. I would extend the list — the difficulty note promises something the game
-should deliver, and 14 more word pairs is a ten-minute job.
+`leaveRoom` hands the turn on before unseating, a closed tab unseats the player
+through `onDisconnect`, and the turn clock (1.3) covers the case where neither
+happens. The host control the UI implied now exists inside the live room: a
+"close the room" door in the masthead (`src/pages/MultiplayerRoom.tsx:180`),
+behind a confirmation, not only on the result panel.
 
-### 0.5 A leaver freezes the room forever
+### 0.6 Housekeeping — **shipped**
 
-**Mostly done, in Phase 1.** `leaveRoom` used to remove the player and nothing
-else, so a leaver holding the turn left `currentTurn` pointing at a uid with no
-player and the room dead. It now hands the turn on before unseating, closing a tab
-unseats the player through `onDisconnect`, and the turn clock (1.3) covers the
-case where neither happens.
+The `console.log("game state", gs)` is gone from `useMultiplayer`, and
+`index.html` ships `/favicon.svg` — the vermilion crosshatch card back — instead
+of `vite.svg`.
 
-**Still to do:** the host control the UI implies — reclaim or close the table from
-the room itself. "Close the room" exists, but only on the result modal after a
-finished hand.
+### 0.7 The leaderboard rules reject the two solo games — **open, and live**
 
-### 0.6 Housekeeping
+This is the sharp edge of 0.2, and it is the most urgent thing in the document.
 
-- Remove `console.log("game state", gs)` (`src/hooks/useMultiplayer.ts:36`) — it
-  logs the full board, every flip, in production.
-- `index.html:5` still ships `<link rel="icon" type="image/svg+xml" href="/vite.svg" />`.
-  The app has a strong visual identity and a vermilion crosshatch card back that
-  would make a perfect favicon.
+`NumberSequencePage` and `PatternMemoryPage` both call `saveGameResult` with
+`difficulty: "4x4"` hard-coded and a score that accumulates without bound —
+`score + level * 10` and `score + level * 15` respectively. The leaderboard rule
+caps a `4x4` entry at **800** and floors it at **10**. So:
+
+- a Number Sequence run that reaches level 13 scores 910 and is **denied**
+- a Pattern Memory run that reaches level 10 scores 825 and is **denied**
+- either game lost on level 1 scores 0 and is **denied** on the floor
+
+And because all three writes are now one transaction, a rejected leaderboard row
+takes the **game history row and the profile counters down with it**. The good
+run is the one that vanishes. Atomicity made this failure total rather than
+partial, which is the right trade — but only once the bounds are right.
+
+**Do:** the two solo games are not board games and should not be scored on a
+board-size ceiling. Give the leaderboard rule a per-game shape rather than a
+per-difficulty one — `maxScoreFor(gameType, difficulty)` reading the `gameType`
+wildcard the match already binds — and pick honest bounds for a level-based
+score. Drop the `>= 10` floor to `>= 0`, since a lost first level is a real
+result. Then add the deny cases to `scripts/test-firestore-rules.mjs`, because
+this is exactly the class of bug that is silent in the client: the write fails,
+nothing on screen says so, and the player's game is simply not recorded.
+
+**Also worth fixing while in there:** neither solo game has a real difficulty, so
+they are stamping `4x4` to satisfy a field shaped for the card games. Either give
+`GameResult.difficulty` an honest value for them or make the field optional.
+
+### 0.8 The profile stores the account password — **open, and live**
+
+`createUserProfile` (`src/firebase/firestore.ts:32`) writes
+
+```
+password: btoa(String.fromCharCode(...new TextEncoder().encode(password)))
+```
+
+into `users/{uid}`. That is base64, not a hash — it is the plaintext password with
+extra steps, reversible by anyone in one line. The field is declared in
+`UserProfile` and **is never read anywhere in the app**. Meanwhile
+`firestore.rules` makes every profile readable by any signed-in user, so any
+account can read every other account's password, and those passwords are
+certainly reused elsewhere.
+
+Firebase Auth already holds the credential; the app never needs it again — the
+reset flow in `ad77a10` goes through Auth, not this field.
+
+**Do:** delete the parameter from `createUserProfile`, the field from
+`UserProfile`, and the argument from `registerWithEmail`. Then purge the field
+from the documents already written — a one-off script against the existing
+`users` collection, since rules forbid a client from touching another profile and
+nothing on the client would clear its own. Consider tightening the profile read
+rule at the same time: the leaderboard already carries the display name, and
+there is no screen that needs to read a stranger's whole profile document.
 
 ---
 
@@ -193,22 +203,27 @@ write the client makes:
 - a player's `score` may only rise by one, only by that player, and only while
   they hold the turn
 - `currentTurn` may only be handed to a uid that is actually seated
-- rooms may not be listed, only opened by code; `hostId`, `gameType`,
-  `difficulty` and `createdAt` are immutable after creation
+- rooms may not be listed, only opened by code; `hostId` and `createdAt` are
+  immutable after creation
 - `createdAt` and `turnStartedAt` are pinned to server time (`newData.val() === now`),
   so the staleness sweep and the turn clock cannot be gamed by a bad clock
 
 What rules still cannot check is whether a claimed match is *real* — the client
 computes `cards`, and a rule cannot cheaply compare two card faces. That last mile
-is Phase 5.2. Also unenforceable without counting children: `maxPlayers`. A
-patched client can seat a fifth player at a four-seat table; the join is otherwise
-legal and nothing else breaks.
+is Phase 5.2.
 
-`npm run test:rules` runs 42 assertions against the emulator — the deny cases as
-much as the allow ones. Two emulator traps are documented in
-`scripts/test-rules.mjs`, because either one makes the whole suite vacuously
-green: an `owner` bearer token bypasses rules, and a namespace the emulator has no
-rules for is wide open.
+`maxPlayers` is the other thing rules cannot express, because they cannot count
+children. It now has a client-side answer rather than none: `joinRoom` verifies
+the seat it took and stands the player back up if their `seatedOrder` puts them
+past capacity — which also fixes two players clearing the capacity check in the
+same instant. A patched client can still seat a fifth player at a four-seat
+table; the join is otherwise legal and nothing else breaks.
+
+`npm run test:rules` runs **77 assertions against the Realtime Database rules and
+28 against Firestore's** — the deny cases as much as the allow ones. Two emulator
+traps are documented in `scripts/test-rules.mjs`, because either one makes the
+whole suite vacuously green: an `owner` bearer token bypasses rules, and a
+namespace the emulator has no rules for is wide open.
 
 **1.3 The turn clock is real.** `turnStartedAt` was written on every resolve and
 never read. It now drives a visible countdown, and once it expires anyone still at
@@ -217,10 +232,19 @@ so it cannot be used to jump a live turn. Deadlines are server-stamped and the
 countdown is drawn against `.info/serverTimeOffset`, so a player whose clock is
 wrong still sees the right number.
 
-**1.4 Quick match no longer scans the database.** It read **every room** and
-filtered in the browser; the rules in 1.2 forbid that outright. Public rooms now
+**1.4 Quick match is a search, not a lookup.** It used to read **every room** and
+filter in the browser; the rules in 1.2 forbid that outright. Public rooms now
 publish a pointer to `openRooms/{gameType}_{difficulty}_{theme}/{roomId}`, and
 matchmaking reads one bucket, capped at eight candidates.
+
+The first version of that read the index once and, finding nothing, opened a
+table and sat down at it — so two players pressing the button in the same second
+each sat alone at a different table forever. It is now a two-minute search: sweep
+the index, open a table so we can be found, watch it for an arrival, keep
+sweeping. Which of two simultaneous tables gets abandoned is settled by room code
+in `pickOpponentRooms` (`src/utils/matchUtils.ts`), so exactly one player moves
+whichever order they arrive in. The lobby shows a live clock, a "stop looking"
+control and a timeout notice.
 
 **1.5 Rooms clean up after themselves.** No scheduled function, so cleanup is
 opportunistic and comes from four places: `onDisconnect().remove()` on the player
@@ -229,7 +253,20 @@ leaves; retracting index pointers that outlived their rooms, on the next quick
 match; and a rule letting any signed-in client delete a *waiting* room older than
 six hours, which the join path does when it meets one. The last player in a
 **private** room also arms `onDisconnect` on the room itself — nothing indexes
-private rooms, so nobody else could ever find one to sweep it.
+private rooms, so nobody else could ever find one to sweep it. A lone searcher's
+table and its index pointer go with the tab if it closes, so the next searcher
+does not inherit a ghost.
+
+**1.6 Rooms play more than one hand.** Not in the original plan, and it changed
+the shape of the room: `RoomStatus` cycles `waiting → playing → round-finished →
+playing` instead of ending at a terminal `finished`, `Room.round` counts,
+`Room.nextRound` carries a proposal plus a `readyPlayers` map, and
+`RoomPlayer.roundsWon` persists while `score` resets each round. Players change
+game, size or theme between rounds without leaving the table; ending a session is
+a room delete, which any seated player may do. The rules gained the transitions
+and the resets. Details and the one accepted gap — true "everyone agreed to
+*this* proposal" consensus is not cheaply expressible for a variable-size room,
+so it is client-enforced — are in `MULTIPLAYER_ROUNDS.md`.
 
 Two other things fell out of the work. Turn order was `Object.keys(players)`,
 which is not a guaranteed order and so could differ between clients mid-game; it
@@ -247,53 +284,73 @@ Phase 5.3 buys.
 
 ## Phase 2 — Foundations worth having before more features
 
-**2.1 Split the bundle.** The build ships ~925 KB of JavaScript across five
-chunks — `firebase-vendor` is 484 KB of it, `motion` another 123 KB — with no
-`lazy()` or `Suspense` anywhere, so every visitor downloads the Realtime Database
-and both multiplayer pages to play Pattern Memory once. `vite.config.ts` already
-splits vendors by library, which is the easy half; the missing half is
-route-level `lazy()`, so those vendors stay out of the first-load path.
+**2.1 Split the bundle.** The build ships ~959 KB of JavaScript across five
+chunks — `firebase-vendor` is 491 KB of it, `motion` another 123 KB, and the
+entry chunk has grown to 296 KB as chat and multi-round rooms landed — with no
+`lazy()` or `Suspense` anywhere. Every visitor downloads the Realtime Database,
+the chat panel and both multiplayer pages to play Pattern Memory once.
+`vite.config.ts` already splits vendors by library, which is the easy half; the
+missing half is route-level `lazy()` in `src/routes/AppRoutes.tsx`, where all
+fourteen pages are static imports, so those vendors stay out of the first-load
+path.
 
 On Spark this is a capacity question, not just a speed one: first load is the
 number that divides into the daily hosting allowance. Cutting it roughly in half
-doubles how many people can visit before the site goes dark for the day.
+doubles how many people can visit before the site goes dark for the day. This is
+the item that has moved backwards since the last revision, and it is the reason
+it is now first in the week below.
 
-**2.2 Tests.** There is no test runner and no `test` script in `package.json`.
-Best return per line of setup: `calculateScore` and `generateCards` (pure, and the
-deck generator has already shipped one silent off-by-one in its Word Match twin),
-`useCardFlip` behaviour, and multiplayer turn resolution once it moves out of the
-component. Vitest plus Testing Library, `npm test` in CI beside the lint step that
-already passes clean. The emulator suite is free and can test the 0.1 rules too —
-worth doing, since rules are now load-bearing.
+**2.2 Tests.** There is still no test runner and no `test` script in
+`package.json`. What exists is three emulator/integration scripts —
+`test:rules`, `test:match`, `test:chat` — which cover the rules well and the
+client not at all. Best return per line of setup: `calculateScore` and
+`generateCards` (pure, and the deck generator has already shipped one silent
+off-by-one in its Word Match twin), `pickOpponentRooms` (already written to be
+testable in isolation and currently only exercised by the integration script),
+`useCardFlip` behaviour, and multiplayer turn resolution. Vitest plus Testing
+Library, `npm test` in CI beside the lint step that already passes clean.
 
-**2.3 Extract one game engine.** `WordMatchPage.tsx` reimplements `useCardFlip`
-almost line for line — its own flip state, lock, timer, moves and completion
-handling — and the two have already drifted (different scoring, different
-difficulty handling, the 8×8 bug in one and not the other). One
-`useMatchGame({ deck, scoring })` hook, with Card Flip and Word Match passing
-different deck generators, removes the drift and is what keeps 0.3 fixed.
+**2.3 Extract one game engine.** `WordMatchPage.tsx` still reimplements
+`useCardFlip` almost line for line — its own `flippedIds`, lock, timer, moves and
+completion handling, 166 lines against the hook's 123. The deck generator is no
+longer duplicated (0.3 moved it out), but the scoring still is, and it has
+drifted: `useCardFlip` uses `calculateScore` (`moves * 2 + time * 0.5` penalty),
+Word Match computes `totalPairs * 100 - moves * 3` inline with no time penalty at
+all — while the game shows a timer. One `useMatchGame({ deck, scoring })` hook,
+with Card Flip and Word Match passing different deck generators, removes the
+remaining drift and is what keeps 0.3 fixed.
 
-**2.4 Make the board keyboard-accessible.** `Card` is a `<div onClick>` with no
-`role`, no `tabIndex`, no `aria-label` (`src/components/game/Card.tsx:31`). The
-card games cannot be played without a mouse and are opaque to a screen reader —
-conspicuous, because the rest of the app is careful: `aria-pressed` on every lobby
-option, labelled lives counters, `useReducedMotion` throughout. Make it a real
-`<button>` with an accessible name ("Card 7, face down"), and announce matches via
-a live region. Half a day, and it brings the weakest part of the app up to the
-standard the rest already sets.
+Worth noting the rules now depend on this: `firestore.rules` documents its score
+ceiling as mirroring `calculateScore` "and the Word Match twin in
+`src/utils/wordUtils.ts`" — but there is no scoring function in `wordUtils.ts`.
+The comment describes where the code should be, not where it is.
 
-**2.5 Add an error boundary.** Any throw inside a game unmounts the whole app to a
-blank page. One boundary at the route level, in the Parlour's voice, is an hour's
-work — and more valuable here than usual, because once rules enforce writes (0.1),
-permission-denied becomes a normal client-side failure mode.
+**2.4 Make the board keyboard-accessible.** `Card` is still a `<div onClick>`
+with no `role`, no `tabIndex`, no `aria-label` (`src/components/game/Card.tsx:32`).
+The card games cannot be played without a mouse and are opaque to a screen reader
+— conspicuous, because the rest of the app is careful: `aria-pressed` on every
+lobby option, labelled lives counters, `aria-label` on every icon button in the
+room masthead, `useReducedMotion` throughout. Make it a real `<button>` with an
+accessible name ("Card 7, face down"), and announce matches via a live region.
+Half a day, and it brings the weakest part of the app up to the standard the rest
+already sets.
+
+**2.5 Add an error boundary.** There is none — any throw inside a game unmounts
+the whole app to a blank page. One boundary at the route level, in the Parlour's
+voice, is an hour's work — and more valuable now than when this was written,
+because rules enforce writes and permission-denied is a live client-side failure
+mode. 0.7 is the proof: a denied write today fails silently with nothing on
+screen.
 
 ---
 
 ## Phase 3 — Reasons to come back
 
 The app has four games, a leaderboard and a profile — everything needed to play
-once. Nothing yet gives a reason to return tomorrow. All of this is free; 3.1 and
-3.2 are noticeably weaker without a server, and I would ship them anyway.
+once. Multiplayer now gives a reason to stay at the table (1.6) and something to
+say while you're there (3.6). Nothing yet gives a reason to return tomorrow. All
+of this is free; 3.1 and 3.2 are noticeably weaker without a server, and I would
+ship them anyway.
 
 **3.1 The Daily Hand.** One seeded deck per day, the same for everyone, one scored
 attempt. It costs almost nothing — seed the existing shuffle by date — and it is
@@ -305,12 +362,13 @@ attempt" is enforced only by the leaderboard rule from 0.2 that refuses a second
 write for the same day. Fine for a friendly board.
 
 **3.2 Time-boxed leaderboards.** `getLeaderboard`
-(`src/firebase/firestore.ts:141`) is all-time only, so a player arriving next
+(`src/firebase/firestore.ts:123`) is all-time only, so a player arriving next
 month can never appear on it. The one-row-per-player problem is already fixed —
 entries are keyed `{uid}_{difficulty}` and the query keeps each player's best — so
 what is left is genuinely just the time window: extend the entry ID to
 `{uid}_{difficulty}_{YYYY-MM-DD}`, store the day as a field, and query it. This is
-what makes 3.1 worth playing.
+what makes 3.1 worth playing. The entry-ID rule in `firestore.rules` is written
+against the two-part ID and will need to move with it.
 
 Count the writes before shipping: a finished game currently writes three
 documents, and a daily board plus a weekly board makes it five. At 20k writes a
@@ -324,12 +382,18 @@ in the browser and hand over a data URL or a clipboard image; do **not** plan on
 uploading it anywhere, since Cloud Storage is a Phase 5 item. Wordle's
 spoiler-free grid is the model.
 
-**3.4 Streaks and honours on the profile.** The profile already computes win rate
-and best scores from counters maintained in `updateUserStats`
-(`src/firebase/firestore.ts:45`); it has room for a streak counter and a small set
+**3.4 Streaks and honours on the profile.** The profile computes win rate and best
+scores from counters that `saveGameResult` maintains inside its transaction
+(`src/firebase/firestore.ts:60`); it has room for a streak counter and a small set
 of earned marks — first perfect hand, ten days running, cleared the long night.
-Cheap to add on top of counters that already exist, and it folds into the same
-transaction as 0.2 rather than adding writes.
+Cheap to add on top of counters that already exist, and it folds into that same
+transaction rather than adding writes.
+
+**3.5 Sound.** Four memory games with no audio. A short set of letterpress-ish
+cues — the card, the match, the miss — with a persisted mute toggle, adds a
+surprising amount of feel for a day's work. Keep the files tiny and let them
+cache: audio comes out of the same daily hosting transfer as the bundle, which
+2.1 is already trying to win back.
 
 **3.6 Table talk — shipped.** A chat beside the multiplayer board: free text
 plus a row of one-tap phrases for when the turn clock is running, a per-device
@@ -344,11 +408,6 @@ be checked from a sibling path in the same write, so the one-second cooldown
 is client manners only. A patched client can flood a table it is seated at,
 and nothing else; that is the honest ceiling, same as `maxPlayers`.
 
-**3.5 Sound.** Four memory games with no audio. A short set of letterpress-ish
-cues — the card, the match, the miss — with a persisted mute toggle, adds a
-surprising amount of feel for a day's work. Keep the files tiny and let them
-cache: audio comes out of the same daily hosting transfer as the bundle.
-
 ---
 
 ## Phase 4 — The bigger bets
@@ -359,8 +418,9 @@ believe in them. All of these still fit inside the free plan.
 - **Race mode for the solo games.** Number Sequence and Pattern Memory are
   single-player only, and both are naturally competitive: same seed, same start,
   live progress bars, first to fail drops out. It reuses the room infrastructure
-  Phase 1 will have hardened, and doubles the multiplayer catalogue again. Watch
-  the 100-connection ceiling — this is the feature most likely to find it.
+  Phase 1 hardened — including the round cycle from 1.6, which already lets a
+  table switch game between hands — and doubles the multiplayer catalogue again.
+  Watch the 100-connection ceiling: this is the feature most likely to find it.
 - **Asynchronous challenges.** Send a friend a link to the exact hand you just
   played, with the seed encoded in the URL. No lobby, no waiting, no scheduling,
   no database write at all — the lowest-friction multiplayer there is, and the
@@ -374,7 +434,8 @@ believe in them. All of these still fit inside the free plan.
   spot-the-difference — would broaden the appeal without breaking the theme.
 - **Difficulty that adapts.** Three fixed sizes are coarse. Tuning the board to a
   player's measured accuracy would keep the middle of the skill curve engaged, and
-  the data to do it is already in `gameHistory`.
+  the data to do it is already in `gameHistory` — once 0.7 stops throwing some of
+  it away.
 
 ---
 
@@ -390,14 +451,17 @@ on day one, before deploying anything.
 **5.1 Authoritative score writes.** A Cloud Function on `gameHistory` create
 derives the leaderboard row and the profile counters server-side, and rules drop
 client writes to the leaderboard entirely. This is the difference between a board
-that is hard to forge (0.2) and one that is impossible to forge.
+that is hard to forge (0.2) and one that is impossible to forge. It would also
+retire the whole class of bug in 0.7, where the client's arithmetic and the
+rules' bounds have to be kept in agreement by hand across two files.
 *Trigger:* the first forged entry, or the first time a prize, season or public
 ranking makes forging worth someone's afternoon.
 
 **5.2 Server-side turn resolution.** A function triggered on the second flip
 compares the two card faces, awards the point and hands out the next turn —
 closing the one gap rules cannot check in 1.2, where a client claims a match that
-never happened.
+never happened. The same function is the natural home for the `maxPlayers` count
+and the chat rate limit, both of which are client manners today.
 *Trigger:* multiplayer between strangers rather than between friends.
 
 **5.3 Scheduled cleanup and TTL.** A nightly function deleting rooms older than a
@@ -427,25 +491,33 @@ difficulty in Phase 4. None of these are close.
 
 ## What I would do first
 
-If I had one week, on the free plan:
+The original week is mostly spent: Phase 0's rules, transaction, decks, word
+list, leaver fix, favicon and stray log all shipped in `ee7e6e9`, and Phase 1
+shipped with them. Multi-round rooms, a real quick-match search, the
+forgot-password flow and table talk have landed since.
 
-1. **Days 1–2** — Phase 0 in full: both rule files deployed and emulator-tested,
-   the three writes folded into one transaction, the Word Match deck, the 8×8 word
-   list, the leaver fix, the favicon, the stray `console.log`. The app is live;
-   this is the part that is actually urgent, and none of it needs billing.
-2. ~~**Day 3** — Phase 1's rules work.~~ **Done**: `database.rules.json` with
-   `npm run test:rules` behind it, the score transaction, the `openRooms` index,
-   and the turn clock. Note that Phase 0.1 is only half closed — the Realtime
-   Database has rules now, Firestore still does not.
-3. **Day 4** — Route-level `lazy()` (2.1), then Vitest with tests around
-   `cardUtils`, `useCardFlip` and the new rules (2.2). Before the engine
-   extraction, so it has a net under it.
-4. **Day 5** — Extract `useMatchGame`, fold Word Match into it, make `Card` a real
-   button.
+The next week, on the free plan:
 
-The Daily Hand slips to week two, which is the honest cost of doing the rules work
-by hand instead of buying a function. It is still the next feature.
+1. **Day 1 — the two live bugs, in this order.** 0.7 first: the leaderboard rule
+   is currently throwing away finished games in two of the four titles, and every
+   day it stays up is data that is gone. Then 0.8 — delete the password field,
+   and purge it from the documents already written. Neither is more than a few
+   hours, and both are the kind of thing that is embarrassing to find later.
+2. **Day 2 — route-level `lazy()` (2.1).** The bundle is the one number that has
+   moved the wrong way, and it is the ceiling on how many people can visit at all.
+   Fourteen static page imports in one router file is an afternoon's work for
+   roughly half the first load.
+3. **Day 3 — Vitest (2.2),** around `calculateScore`, `generateCards`,
+   `pickOpponentRooms` and `useCardFlip`. Before the engine extraction, so it has
+   a net under it — and so 0.7's fix has somewhere to grow a regression test that
+   is not an emulator run.
+4. **Day 4 — extract `useMatchGame` (2.3),** fold Word Match into it and settle
+   the scoring drift, then make `Card` a real button (2.4). Add the error
+   boundary (2.5) on the way past; it is an hour.
+5. **Day 5 — the Daily Hand (3.1).** Which is where this document has wanted to
+   be for two revisions now, and it is still the next feature rather than the
+   next chore.
 
 And what I would deliberately not do yet: more games, more themes, more decks. The
-catalogue is not the constraint — one of the four games has never worked in
-multiplayer, and none of them have a reason to be played twice. Fix that first.
+catalogue is not the constraint — two of the four games currently fail to record a
+good run, and none of them have a reason to be played twice. Fix that first.
