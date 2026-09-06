@@ -170,6 +170,38 @@ const run = async () => {
   await check('a leaderboard row cannot be deleted', 'deny', () =>
     deleteDoc(doc(alice, 'leaderboard/card-flip/scores', row)));
 
+  // The level games — Number Sequence and Pattern Memory — have no board, so a
+  // board-sized ceiling refused their better runs outright, and with them the
+  // history row and profile counters in the same transaction (ROADMAP 0.7).
+  console.log('\nleaderboard — the level games');
+  // Number Sequence loses the very first sequence: level 0, nothing scored.
+  await check('a first-hand loss scores nothing and is still recorded', 'allow', () =>
+    setDoc(doc(alice, 'leaderboard/number-sequence/scores', row), entry({ score: 0, moves: 0 })));
+
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(
+      doc(ctx.firestore(), 'leaderboard/number-sequence/scores', row),
+      entry({ score: 0, moves: 0, completedAt: Timestamp.fromMillis(Date.now() - 10_000) })
+    );
+  });
+  // Fourteen levels of Number Sequence is 5m(m-1) = 910, over the 800 a 4x4
+  // board allows — which is the difficulty the game submits for want of one.
+  await check('a run past the old board ceiling is kept', 'allow', () =>
+    setDoc(doc(alice, 'leaderboard/number-sequence/scores', row), entry({ score: 910, moves: 14 })));
+  await check('a level count nobody has played is refused', 'deny', () =>
+    setDoc(doc(alice, 'leaderboard/number-sequence/scores', row), entry({ score: 1000, moves: 501 })));
+
+  // Ten cleared levels of Pattern Memory is 7.5n(n+1) = 825, at level 11.
+  await check('a Pattern Memory run past the old board ceiling is kept', 'allow', () =>
+    setDoc(doc(alice, 'leaderboard/pattern-memory/scores', row), entry({ score: 825, moves: 11 })));
+  await check('a score the level reached could not have earned is refused', 'deny', () =>
+    setDoc(doc(alice, 'leaderboard/pattern-memory/scores', row), entry({ score: 5000, moves: 11 })));
+
+  await check('a board game keeps its board ceiling', 'deny', () =>
+    setDoc(doc(alice, 'leaderboard/word-match/scores', row), entry({ score: 4000, moves: 40 })));
+  await check('an invented game collection is refused', 'deny', () =>
+    setDoc(doc(alice, 'leaderboard/solitaire/scores', row), entry({ score: 999999, moves: 400 })));
+
   console.log(`\n${pass} passed, ${fail} failed\n`);
   await testEnv.cleanup();
   process.exit(fail === 0 ? 0 : 1);
