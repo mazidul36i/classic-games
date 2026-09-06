@@ -27,7 +27,11 @@
         // Whole-room writes are creation and destruction only. Everything else
         // has to satisfy the per-field rules below.
         ".write": "auth != null && ((!data.exists() && newData.child('hostId').val() === auth.uid) || (!newData.exists() && (data.child('hostId').val() === auth.uid || !data.child('players').exists() || (data.child('players').child(auth.uid).exists() && data.child('status').val() !== 'playing') || now > data.child('createdAt').val() + 21600000)))",
-        ".validate": "newData.hasChildren(['hostId', 'isPrivate', 'maxPlayers', 'status', 'gameType', 'difficulty', 'theme', 'round', 'players', 'createdAt'])",
+        // 'players' is deliberately not in this list: a lone player's seat can be
+        // removed (by leaving, or by the onDisconnect hook armed for them) without
+        // anyone else there to close the room behind them, which would otherwise
+        // collapse 'players' to empty and fail this validate on that same write.
+        ".validate": "newData.hasChildren(['hostId', 'isPrivate', 'maxPlayers', 'status', 'gameType', 'difficulty', 'theme', 'round', 'createdAt'])",
 
         "hostId": {
           ".validate": "newData.isString() && (!data.exists() || newData.val() === data.val())"
