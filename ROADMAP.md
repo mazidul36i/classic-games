@@ -178,6 +178,39 @@ nothing on the client would clear its own. Consider tightening the profile read
 rule at the same time: the leaderboard already carries the display name, and
 there is no screen that needs to read a stranger's whole profile document.
 
+### 0.9 The turn ping-pongs once a clock expires — **open, and live**
+
+Found while verifying 3.5's sound, with two accounts at one table. Once a turn
+genuinely runs out the 45s limit, `currentTurn` does not settle on the next
+seat — it alternates between the two players continuously, each hop writing
+`currentTurn`, `flippedCards` and `turnStartedAt` again. Both tabs became
+unresponsive under the write volume, and the table is unplayable from then on.
+
+Nothing about it is new; it was simply inaudible before. The sound cues read
+turn changes off the room snapshot, so the loop announced itself as an endless
+alternating bell — 453 voices queued on one client before I stopped counting.
+
+**Not** clock skew: `.info/serverTimeOffset` measured **1099 ms** against a
+45,000 ms limit, so both clients agree with the server about when a turn is
+over. The suspects are the expiry effect at `src/hooks/useMultiplayer.ts:86-99`
+— where every seated client races to call `passTurn`, and the comment's claim
+that "the first one wins and the rest are refused" is what the observed
+behaviour contradicts — together with the `currentTurn` / `turnStartedAt`
+`.write` rules in `database.rules.json`, which gate on
+`now > turnStartedAt + 45000` and should refuse a second pass landing
+immediately after the first.
+
+**Do:** reproduce by seating two accounts and letting one turn expire without
+touching the board. Then decide whether the pass should be a transaction on
+`gameState` rather than a plain `update`, so two clients cannot both move the
+turn from the same starting state. Worth doing before Phase 4's race mode,
+which puts far more turn traffic through this same path — and worth doing for
+the quota alone, since a looping table writes to Realtime Database forever.
+
+The sound layer already defends itself: announcement cues are throttled to one
+per 1200 ms in `src/audio/cues.ts`, so a flapping room can no longer machine-gun
+the bell. That is a muffler, not a fix.
+
 ---
 
 ## Phase 1 — Make the table trustworthy without a server — **shipped**
@@ -524,11 +557,14 @@ forgot-password flow and table talk have landed since.
 
 The next week, on the free plan:
 
-1. **Day 1 — the two live bugs, in this order.** 0.7 first: the leaderboard rule
+1. **Day 1 — the live bugs, in this order.** 0.7 first: the leaderboard rule
    is currently throwing away finished games in two of the four titles, and every
    day it stays up is data that is gone. Then 0.8 — delete the password field,
    and purge it from the documents already written. Neither is more than a few
    hours, and both are the kind of thing that is embarrassing to find later.
+   0.9 is the third, and it wants a day of its own rather than an hour: an
+   expired turn currently leaves the table ping-ponging and writing forever,
+   which makes a room unplayable and quietly eats the write quota.
 2. **Day 2 — route-level `lazy()` (2.1).** The bundle is the one number that has
    moved the wrong way, and it is the ceiling on how many people can visit at all.
    Fourteen static page imports in one router file is an afternoon's work for
