@@ -5,6 +5,7 @@ import { RotateCcw } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { saveGameResult } from "../firebase/firestore";
 import { generateWordCards } from "../utils/wordUtils";
+import { play } from "../audio/cues";
 import GameHead from "../components/game/GameHead";
 import GameStats from "../components/game/GameStats";
 import WinModal from "../components/game/WinModal";
@@ -38,6 +39,8 @@ export default function WordMatchPage() {
       const card = cards.find((c) => c.id === id);
       if (!card || card.isFlipped || card.isMatched) return;
 
+      play("flip");
+
       const newFlipped = [...flippedIds, id];
       setFlippedIds(newFlipped);
       setCards((prev) => prev.map((c) => (c.id === id ? { ...c, isFlipped: true } : c)));
@@ -58,7 +61,10 @@ export default function WordMatchPage() {
             );
             const newMatched = matchedPairs + 1;
             setMatchedPairs(newMatched);
+            play("match");
             if (newMatched === totalPairs) {
+              // Held back so it lands after the match rather than over it.
+              play("win", { delay: 0.28 });
               const score = Math.max(totalPairs * 100 - moves * 3, 10);
               setFinalScore(score);
               setIsComplete(true);
@@ -79,6 +85,7 @@ export default function WordMatchPage() {
               }
             }
           } else {
+            play("miss");
             setCards((prev) =>
               prev.map((c) =>
                 c.id === firstId || c.id === id ? { ...c, isFlipped: false } : c
@@ -94,6 +101,9 @@ export default function WordMatchPage() {
   );
 
   const restart = () => {
+    // Only an asked-for deal is announced — the opening hand is dealt in the
+    // useState initializer above, before there is a gesture to unlock audio.
+    play("deal");
     setCards(generateWordCards(difficulty));
     setFlippedIds([]);
     setMatchedPairs(0);

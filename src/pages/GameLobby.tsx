@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Users, KeyRound, X } from "lucide-react";
 import PageHead from "../components/layout/PageHead";
 import { useAuth } from "../hooks/useAuth";
+import { play } from "../audio/cues";
 import { useQuickMatch } from "../hooks/useQuickMatch";
 import { createRoom, joinRoom } from "../firebase/realtime";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
@@ -117,6 +118,14 @@ export default function GameLobby() {
     navigate(table);
   };
 
+  /** A refusal the player should notice: the message, and a cue with it.
+   *  Rare enough to be feedback rather than noise — which is why the option
+   *  rows and the dialogs stay silent. */
+  const refuse = (message: string) => {
+    setError(message);
+    play("wrong");
+  };
+
   const handleCreateRoom = async () => {
     if (!isAuthenticated || !user) {
       sendToLogin(location.pathname + location.search);
@@ -131,7 +140,7 @@ export default function GameLobby() {
       // A bare `catch {}` here once hid a PERMISSION_DENIED for days: the room
       // never appeared and the UI only ever said "try again". Keep the reason.
       console.error("[lobby] createRoom failed", err);
-      setError("Failed to open a room. Try again.");
+      refuse("Failed to open a room. Try again.");
     } finally {
       setCreating(false);
     }
@@ -143,7 +152,7 @@ export default function GameLobby() {
       return;
     }
     if (!roomCode.trim()) {
-      setError("Enter a room code");
+      refuse("Enter a room code");
       return;
     }
     setJoining(true);
@@ -153,15 +162,15 @@ export default function GameLobby() {
       if (result === "joined") {
         navigate(`/room/${roomCode.toUpperCase()}`);
       } else if (result === "full") {
-        setError("Every seat at that table is taken.");
+        refuse("Every seat at that table is taken.");
       } else if (result === "in-play") {
-        setError("That hand is already under way.");
+        refuse("That hand is already under way.");
       } else {
-        setError("No room answers to that code.");
+        refuse("No room answers to that code.");
       }
     } catch (err) {
       console.error("[lobby] joinRoom failed", err);
-      setError("Failed to join the room. Please try again.");
+      refuse("Failed to join the room. Please try again.");
     } finally {
       setJoining(false);
     }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sendChatMessage, CHAT_COOLDOWN_MS } from "../firebase/realtime";
 import { normalizeChatText, orderMessages } from "../utils/chatUtils";
+import { play } from "../audio/cues";
 import type { Room, RoomPlayer } from "../types/multiplayer.types";
 
 /** One line in the panel: something a player said, or something the table
@@ -136,6 +137,33 @@ export const useRoomChat = (room: Room | null, currentUid: string | null, isOpen
       ),
     [messages, systemLines]
   );
+
+  /* A pip for anything said by a seat you have not muted.
+     Every id ever seen is kept, rather than a high-water mark: `messages` is
+     rebuilt whenever anyone is muted or unmuted, and `sentAt` is a server
+     stamp that gets *corrected* when your own send is acknowledged — which can
+     reorder the tail. A marker would then re-pip everything after it; a set of
+     ids cannot. It lives in an effect, not beside the render-phase bookkeeping
+     above: playing a sound is a side effect, and React may discard a render. */
+  const pippedRef = useRef<{ roomId: string | null; ids: Set<string> }>({
+    roomId: null,
+    ids: new Set(),
+  });
+  useEffect(() => {
+    const seenIds = pippedRef.current;
+    if (seenIds.roomId !== roomId) {
+      // Baseline: whatever was already said when you sat down is not news.
+      pippedRef.current = { roomId, ids: new Set(messages.map((m) => m.id)) };
+      return;
+    }
+    let heard = false;
+    for (const m of messages) {
+      if (seenIds.ids.has(m.id)) continue;
+      seenIds.ids.add(m.id);
+      if (!m.own && !m.muted) heard = true;
+    }
+    if (heard) play("chat");
+  }, [messages, roomId]);
 
   /* Unread: what other people said while the panel was shut. Whatever was
      already said when the room first loads is history, not news. Same

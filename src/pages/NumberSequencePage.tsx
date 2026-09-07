@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import GameHead from "../components/game/GameHead";
 import { useAuth } from "../hooks/useAuth";
 import { saveGameResult } from "../firebase/firestore";
+import { play, type Cue, type CueOptions } from "../audio/cues";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const GRID_SIZE = 9; // 3x3, numbers 1-9
@@ -26,6 +27,15 @@ export default function NumberSequencePage() {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isClickHandling, setIsClickHandling] = useState(false);
   const clickHandlingRef = useRef(false);
+
+  /* This page schedules several timeouts it does not keep a handle on, so
+     leaving mid-round leaves a few still armed. They have always been harmless
+     — a setState on a gone component is a no-op — but a *cue* fired from one
+     would be an audible ghost on whatever page you moved to. */
+  const onPageRef = useRef(true);
+  const cue = useCallback((name: Cue, options?: CueOptions) => {
+    if (onPageRef.current) play(name, options);
+  }, []);
 
   const beginClickHandling = () => {
     clickHandlingRef.current = true;
@@ -55,12 +65,15 @@ export default function NumberSequencePage() {
       setActiveCell(null);
       timeoutRef.current = setTimeout(() => {
         setActiveCell(seq[i]);
+        // Pitched by the cell itself, so the figure reads as a phrase and the
+        // ear has something to hold on to alongside the eye.
+        cue("cue", { pitch: seq[i] - 1 });
         i++;
         timeoutRef.current = setTimeout(showNext, 600);
       }, 300);
     };
     showNext();
-  }, []);
+  }, [cue]);
 
   const startNextLevel = useCallback((currentSeq: number[], lvl: number) => {
     const next = Math.floor(Math.random() * GRID_SIZE) + 1;
@@ -71,6 +84,7 @@ export default function NumberSequencePage() {
   }, [showSequence]);
 
   const startGame = () => {
+    cue("deal");
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setLives(MAX_LIVES);
     setScore(0);
@@ -99,10 +113,13 @@ export default function NumberSequencePage() {
     if (num !== expectedNum) {
       // Wrong
       setError(num);
+      cue("wrong");
+      cue("life", { delay: 0.13 });
       const newLives = lives - 1;
       setLives(newLives);
       setTimeout(() => setError(null), 500);
       if (newLives <= 0) {
+        cue("bust", { delay: 0.45 });
         setIsGameOver(true);
         setIsPlayerTurn(false);
         endClickHandling();
@@ -131,9 +148,13 @@ export default function NumberSequencePage() {
       return;
     }
 
+    // Right cell: the player's own, lighter echo of the pip they were shown.
+    cue("cue", { pitch: num - 1, soft: true });
+
     if (newPlayerSeq.length === sequence.length) {
       setTimeout(() => {
         // Completed level
+        cue("level");
         const newScore = score + level * 10;
         setScore(newScore);
         setIsPlayerTurn(false);
@@ -146,7 +167,9 @@ export default function NumberSequencePage() {
   };
 
   useEffect(() => {
+    onPageRef.current = true;
     return () => {
+      onPageRef.current = false;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CardItem, Difficulty, CardTheme } from '../types/game.types';
 import { generateCards, getPairsCount, calculateScore } from '../utils/cardUtils';
+import { play } from '../audio/cues';
 
 interface UseCardFlipOptions {
   difficulty: Difficulty;
@@ -58,6 +59,7 @@ export const useCardFlip = ({ difficulty, theme, onComplete }: UseCardFlipOption
       if (!card || card.isFlipped || card.isMatched) return;
 
       if (!isActive) setIsActive(true);
+      play('flip');
 
       const newFlipped = [...flippedIds, id];
       setFlippedIds(newFlipped);
@@ -85,13 +87,18 @@ export const useCardFlip = ({ difficulty, theme, onComplete }: UseCardFlipOption
             );
             const newMatched = matchedPairs + 1;
             setMatchedPairs(newMatched);
+            play('match');
             if (newMatched === totalPairs) {
               setIsComplete(true);
               setIsActive(false);
+              // Held back so the fanfare starts after the match has rung out
+              // rather than on top of it.
+              play('win', { delay: 0.28 });
               const score = calculateScore(moves + 1, time, difficulty);
               onComplete?.(moves + 1, time, score);
             }
           } else {
+            play('miss');
             setCards((prev) =>
               prev.map((c) =>
                 c.id === firstId || c.id === secondId
@@ -108,6 +115,15 @@ export const useCardFlip = ({ difficulty, theme, onComplete }: UseCardFlipOption
     [cards, flippedIds, isLocked, isComplete, isActive, matchedPairs, totalPairs, moves, time, difficulty, onComplete]
   );
 
+  /* `initGame` also runs on mount and whenever the table's settings change, and
+     a deck riffling at you the moment a page loads is startling — worse, on a
+     cold load the context is still locked, so it would be swallowed anyway.
+     Only an asked-for deal is announced. */
+  const restart = useCallback(() => {
+    initGame();
+    play('deal');
+  }, [initGame]);
+
   return {
     cards,
     flippedIds,
@@ -118,6 +134,6 @@ export const useCardFlip = ({ difficulty, theme, onComplete }: UseCardFlipOption
     isComplete,
     isLocked,
     flipCard,
-    restart: initGame,
+    restart,
   };
 };

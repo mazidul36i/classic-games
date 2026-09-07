@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import SoundToggle from "./SoundToggle";
 
 const LINKS = [
   { to: "/", label: "Front Page", match: (p: string) => p === "/" },
@@ -35,7 +36,8 @@ export default function Navbar() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <SoundToggle />
             {isAuthenticated ? (
               /* Everything account-related — including leaving — lives on the profile page. */
               <Link to="/profile" className="flex items-center gap-2.5 group">

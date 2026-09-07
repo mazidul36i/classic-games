@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import GameHead from "../components/game/GameHead";
 import { useAuth } from "../hooks/useAuth";
 import { saveGameResult } from "../firebase/firestore";
+import { play, type Cue, type CueOptions } from "../audio/cues";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const GRID_SIZE = 4; // 4x4 = 16 cells
@@ -32,6 +33,14 @@ export default function PatternMemoryPage() {
   const [isGameOver, setIsGameOver] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* Not every timeout on this page is held in `timeoutRef`, so leaving
+     mid-round leaves a couple armed. Harmless while they only set state; a cue
+     from one would be an audible ghost on the next page. */
+  const onPageRef = useRef(true);
+  const cue = useCallback((name: Cue, options?: CueOptions) => {
+    if (onPageRef.current) play(name, options);
+  }, []);
 
   const generatePattern = (lvl: number): number[] => {
     const count = Math.min(3 + lvl, 12);
@@ -68,6 +77,10 @@ export default function PatternMemoryPage() {
 
       const cell = pat[index];
       setHighlightedCells([cell]);
+      // Pitched by the *cell*, never by the loop index: a miss replays only the
+      // remainder from `resumeFrom`, and pitching by position would transpose
+      // the same figure against what the player just heard.
+      cue("cue", { pitch: cell });
 
       timeoutRef.current = setTimeout(() => {
         setHighlightedCells([]);
@@ -77,9 +90,10 @@ export default function PatternMemoryPage() {
     };
 
     timeoutRef.current = setTimeout(flashNext, 350);
-  }, []);
+  }, [cue]);
 
   const startGame = () => {
+    cue("deal");
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setLives(MAX_LIVES);
     setScore(0);
@@ -102,6 +116,8 @@ export default function PatternMemoryPage() {
     if (idx !== expected) {
       setIsPlayerTurn(false);
       setErrorCell(idx);
+      cue("wrong");
+      cue("life", { delay: 0.13 });
       const resumeFrom = playerPattern.length;
       setMissedCells(pattern.slice(resumeFrom));
       const newLives = lives - 1;
@@ -109,6 +125,7 @@ export default function PatternMemoryPage() {
 
       setTimeout(() => {
         if (newLives <= 0) {
+          cue("bust");
           setIsGameOver(true);
           if (user) {
             saveGameResult({
@@ -135,9 +152,12 @@ export default function PatternMemoryPage() {
     const newPlayerPattern = [...playerPattern, idx];
     setSuccessCells((prev) => [...prev, idx]);
     setPlayerPattern(newPlayerPattern);
+    cue("cue", { pitch: idx, soft: true });
 
     if (newPlayerPattern.length === pattern.length) {
-      // Level complete
+      // Level complete. This also hands a life back (below) — the one cue
+      // covers both; a second on top of it would only smear this one.
+      cue("level");
       const newScore = score + level * 15;
       setScore(newScore);
       setLives((prev) => Math.min(MAX_LIVES, prev + 1));
@@ -155,7 +175,9 @@ export default function PatternMemoryPage() {
   };
 
   useEffect(() => {
+    onPageRef.current = true;
     return () => {
+      onPageRef.current = false;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);

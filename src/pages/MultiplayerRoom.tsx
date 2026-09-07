@@ -1,11 +1,13 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowRight, Check, ChevronLeft, Copy, DoorOpen, MessageSquare } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useMultiplayer } from "../hooks/useMultiplayer";
 import { useRoomChat } from "../hooks/useRoomChat";
+import { useRoomSounds } from "../hooks/useRoomSounds";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { play } from "../audio/cues";
 import { startGame, cleanupRoom, seatedOrder } from "../firebase/realtime";
 import { generateCards } from "../utils/cardUtils";
 import { generateWordCards } from "../utils/wordUtils";
@@ -57,6 +59,26 @@ export default function MultiplayerRoom() {
   const isWide = useMediaQuery("(min-width: 80rem)");
   const [chatOpen, setChatOpen] = useState(false);
   const chat = useRoomChat(room, user?.uid ?? null, isWide || chatOpen);
+
+  /* Both of these have to stay above the `loading` and `!room` returns below —
+     they are hooks, and those returns are conditional. */
+  useRoomSounds(room, user?.uid ?? null);
+
+  /* The last seconds of your *own* turn, once each. `secondsLeft` is recomputed
+     off a 500ms poll so every value is normally seen twice, and it can skip one
+     outright when a backgrounded tab throttles or the server offset lands — so
+     this tracks the last second actually ticked rather than watching for a
+     particular number, which would silently never arrive. */
+  const tickedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isMyTurn || secondsLeft === null || secondsLeft > 5 || secondsLeft <= 0) {
+      tickedRef.current = null; // also re-arms it for your next turn
+      return;
+    }
+    if (tickedRef.current === secondsLeft) return;
+    tickedRef.current = secondsLeft;
+    play("clock");
+  }, [isMyTurn, secondsLeft]);
 
   useEffect(() => {
     if (!chatOpen || isWide) return;
