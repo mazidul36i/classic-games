@@ -98,25 +98,49 @@ starts empty.
   Documented as `ROADMAP.md` 0.9; it is live in production.
 - **A seat is never deleted once a hand is in play** — it is kept and marked
   `connected: false`, because deleting it on disconnect meant a refresh locked the
-  player out of their own room for good (`ROADMAP.md` 0.10). Anything that asks "who
-  is at this table" has to pick: `seatedOrder` for seats the table is *holding*
-  (capacity, who may come back), `activeOrder` for who is actually playing (turn
-  order, consensus, ready counts). Using the wrong one is how a dropped tab either
-  freezes the table or loses its seat.
+  player out of their own room for good. Anything that asks "who is at this table"
+  has to pick: `seatedOrder` for seats the table is *holding* (capacity, who may come
+  back), `activeOrder` for who is actually playing (turn order, consensus, ready
+  counts). Using the wrong one is how a dropped tab either freezes the table or loses
+  its seat. — `FIX_LOG.md` 2026-09-08, `ROADMAP.md` 0.10
 - **Nothing may finish a turn from a single tab's memory.** A completed pair is
   resolved off the room subscription by whoever holds the turn, so a tab that goes
-  away mid-reveal leaves a pair the *next* tab can finish (`ROADMAP.md` 0.11). Adding
-  a `setTimeout` in a click handler to settle game state reintroduces that bug.
+  away mid-reveal leaves a pair the *next* tab can finish. Adding a `setTimeout` in a
+  click handler to settle game state reintroduces that bug.
+  — `FIX_LOG.md` 2026-09-08, `ROADMAP.md` 0.11
 - A player's score for the round in play is derivable from the board — matched cards
   carry `flippedBy` — which is why the round reset asks `claimedPairs` rather than
   remembering what the round number used to be. A hook's first snapshot is not
-  evidence that anything changed.
+  evidence that anything changed. — `FIX_LOG.md` 2026-09-08
+
+## Recording a fix
+
+**Every bug investigated and resolved gets a short entry in `FIX_LOG.md`**, newest
+first, under `## YYYY-MM-DD — one-line title`, with the commit and files on the next
+line. Keep it to a screen — a sentence or two each of:
+
+- **Issue** — the symptom as reported.
+- **RCA** — what it actually was, and where.
+- **Fix** — what changed, and why that shape if it isn't obvious.
+- **Don't undo** — the invariants the fix rests on, as things not to do.
+- **Verified** — what was run.
+- **Left open** — anything deliberately not fixed.
+
+Put the one-line version of any new invariant under **Gotchas** above and link the
+entry; the log holds the reasoning so the Gotchas line can stay one line.
+
+**Before changing an area, skim the entries naming it** — each lists its files up
+top. Separate from `ROADMAP.md`: the roadmap is the plan, the log is what broke.
+Link between them rather than restating either.
 
 ## Reference docs in this repo
 
 - `README.md` — product, setup, data model, scoring.
 - `ROADMAP.md` — the authoritative plan and bug list, phased and ordered. Check it
   before proposing work; update it when something ships.
+- `FIX_LOG.md` — what has broken, the RCA, and what each fix depends on. Read the
+  entries covering whatever you are about to change; add one whenever you resolve
+  something. See "Recording a fix" above.
 - `MULTIPLAYER_ROUNDS.md` — multi-round room design and its accepted rule gaps.
 - `graphify-out/` — knowledge graph of the repo. `graphify query "<question>"` answers
   structural questions without re-reading files; `GRAPH_REPORT.md` has the community map.
@@ -131,3 +155,7 @@ that must be run in a particular way, a trap that cost you a debugging cycle, or
 convention the code implies but never states. Keep entries short and factual, put them
 under the section they belong to, and delete anything that stops being true. Do not
 duplicate what `README.md` or `ROADMAP.md` already says — link to it instead.
+
+That applies doubly after a debugging session: the one-line lesson belongs here, the
+full account belongs in `FIX_LOG.md`, and neither is finished without the other. See
+"Recording a fix".
