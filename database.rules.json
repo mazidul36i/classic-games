@@ -132,6 +132,16 @@
               ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (newData.val() === data.val() + 1 && root.child('rooms/' + $roomId + '/status').val() === 'round-finished'))"
             },
             "isReady": { ".validate": "newData.isBoolean()" },
+            // Whether the tab holding this seat is connected. Written by the
+            // player, and by the onDisconnect they arm for themselves — which
+            // the server runs under their own auth, so it needs no rule of its
+            // own beyond the seat ownership above.
+            //
+            // Deliberately NOT in the required-children list: seats written
+            // before this field existed are still live in open rooms, and a
+            // room in play must not start refusing writes to them. Absent is
+            // read as present (see `isPresent` in src/utils/flipUtils.ts).
+            "connected": { ".validate": "newData.isBoolean()" },
             "joinedAt": { ".validate": "newData.isNumber() && newData.val() <= now + 5000" },
             "$other": { ".validate": false }
           }

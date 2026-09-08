@@ -9,6 +9,7 @@ import { useRoomSounds } from "../hooks/useRoomSounds";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { play } from "../audio/cues";
 import { startGame, cleanupRoom, seatedOrder } from "../firebase/realtime";
+import { isPresent } from "../utils/flipUtils";
 import { generateCards } from "../utils/cardUtils";
 import { generateWordCards } from "../utils/wordUtils";
 import Card from "../components/game/Card";
@@ -154,7 +155,10 @@ export default function MultiplayerRoom() {
   const nextDifficulty = proposal?.difficulty ?? room.difficulty;
   const nextTheme = proposal?.theme ?? room.theme;
   const myNextReady = Boolean(user?.uid && proposal?.readyPlayers?.[user.uid]);
-  const readyCount = players.filter((p) => proposal?.readyPlayers?.[p.uid]).length;
+  // Seats being kept for someone who stepped away are not waited on, here or in
+  // the deal itself — otherwise one dropped tab would hold the table forever.
+  const here = players.filter(isPresent);
+  const readyCount = here.filter((p) => proposal?.readyPlayers?.[p.uid]).length;
 
   const proposeNext = (gameType: GameType, difficulty: Difficulty, theme: CardTheme) =>
     handleProposeNextRound(gameType, difficulty, theme);
@@ -289,6 +293,9 @@ export default function MultiplayerRoom() {
                       {p.isReady ? "Ready" : "Waiting"}
                     </span>
                   )}
+                  {/* The seat is held, and the turn goes round it, until they
+                      are back — a reload takes about two seconds. */}
+                  {!isPresent(p) && <span className="text-vermilion">{" · "}Away</span>}
                 </p>
               </div>
             </div>
@@ -464,9 +471,9 @@ export default function MultiplayerRoom() {
               </div>
 
               <p className="text-[0.92rem] text-ink-soft text-center mb-5">
-                {readyCount >= players.length && players.length >= 2
+                {readyCount >= here.length && here.length >= 2
                   ? "Everyone's agreed — dealing the next round…"
-                  : `${readyCount}/${players.length} agreed to play this next.`}
+                  : `${readyCount}/${here.length} agreed to play this next.`}
               </p>
 
               <div className="flex flex-wrap gap-4 justify-center">

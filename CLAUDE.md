@@ -17,7 +17,7 @@ multiplayer. Package name is `memory-games`; the repo and hosting site are
 npm run dev        # Vite dev server on :5173
 npm run build      # tsc -b && vite build -> dist/
 npm run lint       # ESLint (flat config, typescript-eslint + react-hooks)
-npm run test:rules # the real test suite: both rule files against the emulators
+npm run test:rules # the real test suite: both rule files + the flip/seat tests
 npm run test:match # matchmaking script (needs emulators already running)
 npm run test:chat  # chat script (needs emulators already running)
 ```
@@ -34,7 +34,23 @@ port and drive them as the two seats at the table.
 
 If either port is not already serving, start it in the background — `npm run dev` takes
 5173, and a second `npm run dev` picks up 5174 on its own. Leave both running for the
-session rather than restarting between checks; a reload drops the seat out of the room.
+session rather than restarting between checks.
+
+Those servers talk to the **live** project, so a test table is a real room in the
+production database and a rules change cannot be tried without deploying it first.
+For anything touching `database.rules.json`, point the app at the emulators instead:
+
+```bash
+firebase emulators:start --only database,firestore,auth --project gs-gameplay
+VITE_USE_EMULATORS=true npx vite --port 5175 --strictPort   # and again on 5176
+```
+
+Start the emulators with the project's **own** id, not a demo one: the RTDB emulator
+serves any namespace and one it has no rules for is wide open, so a mismatched id
+tests nothing. Confirm before trusting a run — a signed-out read of
+`http://127.0.0.1:9000/rooms/X.json?ns=gs-gameplay-default-rtdb` must come back 401.
+Register throwaway players through the app's own `/register`; the Auth emulator
+starts empty.
 
 ## Architecture in one screen
 
@@ -80,6 +96,21 @@ session rather than restarting between checks; a reload drops the seat out of th
 - **Open bug:** when a turn hits the 45s limit, `currentTurn` ping-pongs between seats
   forever and makes the table unplayable (`src/hooks/useMultiplayer.ts` expiry effect).
   Documented as `ROADMAP.md` 0.9; it is live in production.
+- **A seat is never deleted once a hand is in play** — it is kept and marked
+  `connected: false`, because deleting it on disconnect meant a refresh locked the
+  player out of their own room for good (`ROADMAP.md` 0.10). Anything that asks "who
+  is at this table" has to pick: `seatedOrder` for seats the table is *holding*
+  (capacity, who may come back), `activeOrder` for who is actually playing (turn
+  order, consensus, ready counts). Using the wrong one is how a dropped tab either
+  freezes the table or loses its seat.
+- **Nothing may finish a turn from a single tab's memory.** A completed pair is
+  resolved off the room subscription by whoever holds the turn, so a tab that goes
+  away mid-reveal leaves a pair the *next* tab can finish (`ROADMAP.md` 0.11). Adding
+  a `setTimeout` in a click handler to settle game state reintroduces that bug.
+- A player's score for the round in play is derivable from the board — matched cards
+  carry `flippedBy` — which is why the round reset asks `claimedPairs` rather than
+  remembering what the round number used to be. A hook's first snapshot is not
+  evidence that anything changed.
 
 ## Reference docs in this repo
 

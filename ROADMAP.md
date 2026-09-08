@@ -211,6 +211,74 @@ The sound layer already defends itself: announcement cues are throttled to one
 per 1200 ms in `src/audio/cues.ts`, so a flapping room can no longer machine-gun
 the bell. That is a muffler, not a fix.
 
+### 0.10 Refreshing mid-hand locked you out of your own room — **shipped**
+
+Reported from a real game on a phone: refreshed the page, and from then on
+tapping a card did nothing. Reproduced at a two-browser table in about a minute,
+and it was worse than "glitched" — it was total.
+
+`joinRoom` armed `onDisconnect(rooms/{id}/players/{uid}).remove()`. A refresh
+drops the websocket, so the server deleted the seat. `MultiplayerRoom` only ever
+*subscribed* to a room — nothing re-seated you — so you came back to your own
+table as a spectator: board visible, `myPlayer` null, every tap dead. And there
+was no way back in, because `joinRoom` answers `'in-play'` for any room that is
+not `'waiting'`, and the rules refused to re-create a seat in a dealt room. The
+lobby's own words for it were "That hand is already under way."
+
+**Fixed** by keeping the seat instead of deleting it. Seats carry `connected`
+now: a waiting room still gives the seat up on disconnect (a stranger who opens
+a room and closes it should not hold a place), but once cards are down the seat
+is kept and only marked away. `activeOrder` in `src/utils/flipUtils.ts` moves
+the turn straight past an absent seat, so a player who is gone for good still
+costs the table nothing, and one who is merely reloading finds their seat, score
+and turn waiting. Needs the rules deployed — `connected` is a new seat field,
+deliberately not in the required-children list so seats written before it stay
+writable.
+
+One thing this exposed on the way: the round reset was watching `round` change
+to know a fresh round had started, which quietly read "the first round number
+this hook ever saw" as new. Harmless while a reload also cost you your seat;
+once the seat survived it zeroed your score every refresh. It reads the board
+now — matched cards record who turned them, so the pairs standing to your name
+in the round *currently dealt* are a fact rather than something to remember.
+
+### 0.11 A turn could be abandoned halfway, and nothing would finish it — **shipped**
+
+Found while chasing 0.10, and live in production alongside it. The whole
+resolution of a two-card flip — match or miss, the point, the turn, the round —
+ran inside a `setTimeout` in the tab that made the second flip. That tab was the
+only thing in the system that knew the turn was unfinished. Reload it, or let a
+phone discard it in the background, and `flippedCards` stayed at two forever:
+the old handler's `flippedCards?.length >= 2` guard then refused every later tap
+until the 45s clock passed the turn.
+
+A second way into the same dead end: `flipCard` was a read-then-append with no
+check that the card was already in the array, and a card in `flippedCards` is
+only drawn face up — the *stored* card still reads `isFlipped: false`. Two taps
+of one card inside a single round trip (which on a phone is most double taps)
+wrote `[c0, c0]`. A card always matches itself, so that was a free point and a
+partner orphaned for the rest of the round — and neither tap believed it had
+completed a pair, so nothing resolved it either.
+
+**Fixed** in three parts:
+
+- `flipCard` is a transaction on `flippedCards`, so a duplicate and a third card
+  are refused by the write rather than by whatever the tab had in memory.
+- Resolution moved out of the click handler and onto the room subscription
+  (`useMultiplayer`): whoever holds the turn resolves the pair they can *see*,
+  which means the same player's next tab picks it up after a reload. A pair
+  where both ids are the same is treated as an ordinary miss, so a board already
+  spoiled by the old build heals instead of paying out again.
+- The point rides inside `resolvePair`'s single multi-path update with the board
+  that earned it. The score rule reads `status` and `currentTurn` off the stored
+  room, so both are still what they were when the pair was completed, and the
+  whole write is refused together or lands together.
+
+Covered by `scripts/test-flip.mjs` (folded into `npm run test:rules`), which
+pins the stuck states the old client could write as well as the recovery out of
+them, and checks that the rules still refuse a resolve that pays itself more
+than a point or comes from the wrong seat.
+
 ---
 
 ## Phase 1 — Make the table trustworthy without a server — **shipped**
