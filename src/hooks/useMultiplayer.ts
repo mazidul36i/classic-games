@@ -3,14 +3,15 @@ import {
   subscribeToRoom,
   subscribeToServerTimeOffset,
   flipCard,
-  resolveFlip,
+  resolvePair,
   passTurn,
   nextPlayerUid,
-  incrementPlayerScore,
   setPlayerReady,
   leaveRoom,
   armLastSeatDisconnect,
   disarmLastSeatDisconnect,
+  armSeatDisconnect,
+  takeSeatBack,
   creditRoundWin,
   resetOwnScoreForNewRound,
   seedNextRoundProposal,
@@ -20,10 +21,23 @@ import {
   TURN_LIMIT_MS,
   TURN_GRACE_MS,
 } from "../firebase/realtime";
+import {
+  isFlipAllowed,
+  resolvePairOutcome,
+  activeOrder,
+  claimedPairs,
+  REVEAL_MS,
+} from "../utils/flipUtils";
 import { generateCards } from "../utils/cardUtils";
 import { generateWordCards } from "../utils/wordUtils";
 import type { Room, RoomPlayer } from "../types/multiplayer.types";
 import type { CardItem, CardTheme, Difficulty, GameType } from "../types/game.types";
+
+/** How long to wait before trying a refused resolve again, and how many times.
+ *  A pair nobody clears is a dead board, so this does not give up quietly — but
+ *  the turn clock is the real backstop, so it does not need to try forever. */
+const RESOLVE_RETRY_MS = 1_500;
+const RESOLVE_ATTEMPTS = 4;
 
 /** Highest score first, ties broken by uid so every client agrees on an order
  *  without needing to compare notes. */
@@ -43,6 +57,9 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
   const unsubRef = useRef<(() => void) | null>(null);
   const passedTurnRef = useRef<number | null>(null);
   const lastSeatArmedRef = useRef(false);
+  /* The room as of the last snapshot, for callbacks that fire on a timer and
+     must not act on the table as it looked when they were scheduled. */
+  const roomRef = useRef<Room | null>(null);
 
   useEffect(() => {
     if (!roomId) return;
@@ -61,6 +78,10 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
 
   const loading = Boolean(roomId) && loadedRoomId !== roomId;
   const activeRoom = loadedRoomId === roomId ? room : null;
+
+  useEffect(() => {
+    roomRef.current = activeRoom;
+  }, [activeRoom]);
 
   const isPlaying = activeRoom?.status === "playing";
   const gameState = activeRoom?.gameState ?? null;
@@ -112,9 +133,154 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
       armLastSeatDisconnect(roomId).catch(() => {});
     } else if (!shouldArm && lastSeatArmedRef.current) {
       lastSeatArmedRef.current = false;
-      disarmLastSeatDisconnect(roomId, currentUid).catch(() => {});
+      disarmLastSeatDisconnect(roomId, currentUid, activeRoom.status !== "waiting").catch(
+        () => {}
+      );
     }
   }, [roomId, activeRoom, currentUid]);
+
+  /* ── Holding our seat ──────────────────────────────────────────────────────
+     Say we are here, and leave standing instructions for what should become of
+     the seat if this tab goes away.
+
+     Both have to be re-stated when the room changes phase, because what should
+     happen to a seat depends on it: a waiting room gives the seat up, a hand in
+     play keeps it and marks it away. And both have to be re-stated on mount,
+     which is the case this exists for — a reload arrives here holding a seat
+     the table kept for it, marked away, with a dead onDisconnect belonging to a
+     websocket that no longer exists. */
+  const armedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!roomId || !currentUid || !activeRoom) return;
+    const mine = activeRoom.players?.[currentUid];
+    if (!mine) return; // watching a table we are not sitting at
+
+    const keepSeat = activeRoom.status !== "waiting";
+    const armed = `${roomId}:${keepSeat}`;
+    if (armedRef.current !== armed) {
+      armedRef.current = armed;
+      armSeatDisconnect(roomId, currentUid, keepSeat).catch(() => {});
+    }
+    if (mine.connected !== true) {
+      takeSeatBack(roomId, currentUid).catch(() => {});
+    }
+  }, [roomId, currentUid, activeRoom]);
+
+  /* ── Finishing a turn ──────────────────────────────────────────────────────
+     A pair is resolved by whoever holds the turn, off the room as it syncs —
+     not off the click that completed it.
+
+     It used to be a `setTimeout` inside the flip handler, which made that one
+     tab the only thing in the world that knew the turn was unfinished. Reload
+     it, or let a phone discard it in the background, and the pair stayed face
+     up with the turn still assigned: every later tap hit the "two cards are
+     already down" guard, and the table was dead until the 45s clock passed the
+     turn. Reading the pending pair back off the room is what makes that
+     recoverable — the same player's *next* tab picks the turn up and finishes
+     it, because the pair was never anywhere but the database.
+
+     The timer is held in a ref rather than returned as effect cleanup on
+     purpose: this effect re-runs on every room update (a chat line will do it),
+     and cleanup that cancelled the countdown on a run which then early-returns
+     would leave nothing to finish the turn — the very bug being fixed. */
+  const resolveKeyRef = useRef<string | null>(null);
+  const resolveTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const clear = () => {
+      if (resolveTimerRef.current !== null) {
+        window.clearTimeout(resolveTimerRef.current);
+        resolveTimerRef.current = null;
+      }
+    };
+
+    if (!roomId || !currentUid || !activeRoom) return;
+    const gs = activeRoom.gameState;
+    const flipped = gs?.flippedCards ?? [];
+    const pending =
+      activeRoom.status === "playing" &&
+      Boolean(gs) &&
+      gs!.currentTurn === currentUid &&
+      flipped.length >= 2;
+
+    if (!pending) {
+      resolveKeyRef.current = null;
+      clear();
+      return;
+    }
+
+    // One countdown per pair. `turnStartedAt` is in the key so a pair that looks
+    // identical on a later turn is still treated as new.
+    const key = `${activeRoom.round}:${gs!.turnStartedAt}:${flipped.join("|")}`;
+    if (resolveKeyRef.current === key) return;
+    resolveKeyRef.current = key;
+    clear();
+
+    const attempt = (tries: number) => {
+      resolveTimerRef.current = null;
+      const outcome = resolvePairOutcome(roomRef.current, currentUid);
+      if (!outcome) {
+        // Someone else moved the turn on, or the pair is already gone.
+        resolveKeyRef.current = null;
+        return;
+      }
+      resolvePair(roomId, outcome)
+        .then(() => {
+          if (!outcome.isComplete) return;
+          // Only once the round is *stored* as finished will the rules accept a
+          // proposal for the next one, so this cannot ride along in the write
+          // above. If it does not land, the effect below seeds it instead.
+          return seedNextRoundProposal(
+            roomId,
+            activeRoom.gameType,
+            activeRoom.difficulty,
+            activeRoom.theme,
+            activeOrder(roomRef.current?.players ?? {})
+          ).catch(() => {});
+        })
+        .catch(() => {
+          if (tries <= 1) {
+            resolveKeyRef.current = null; // let the next snapshot try again
+            return;
+          }
+          resolveTimerRef.current = window.setTimeout(
+            () => attempt(tries - 1),
+            RESOLVE_RETRY_MS
+          );
+        });
+    };
+
+    resolveTimerRef.current = window.setTimeout(
+      () => attempt(RESOLVE_ATTEMPTS),
+      REVEAL_MS
+    );
+  }, [roomId, currentUid, activeRoom]);
+
+  // Nothing should be left counting down over a room we have left.
+  useEffect(
+    () => () => {
+      if (resolveTimerRef.current !== null) window.clearTimeout(resolveTimerRef.current);
+    },
+    []
+  );
+
+  /* A round that ended with nothing to play next is a dead end: the rules refuse
+     a bare readiness flag, so "Agree — deal me in" would have nothing to attach
+     to. The seed normally rides just behind the resolve; if that tab went away
+     in between, any seated player may put it back. */
+  useEffect(() => {
+    if (!roomId || !currentUid || !activeRoom) return;
+    if (activeRoom.status !== "round-finished") return;
+    if (activeRoom.nextRound) return;
+
+    seedNextRoundProposal(
+      roomId,
+      activeRoom.gameType,
+      activeRoom.difficulty,
+      activeRoom.theme,
+      activeOrder(activeRoom.players ?? {})
+    ).catch(() => {});
+  }, [roomId, currentUid, activeRoom]);
 
   /* The round is over — whoever comes out ahead credits themselves the win.
      Every client computes the same ranking from the same synced scores, so
@@ -136,19 +302,29 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
   }, [roomId, currentUid, activeRoom]);
 
   /* A fresh round starts everyone back at zero. The dealer can only ever zero
-     their own seat (see startNextRound), so every other seat notices `round`
-     has moved on and clears its own score to match. */
-  const lastSeenRoundRef = useRef<number | null>(null);
+     their own seat (see startNextRound), so every other seat has to notice and
+     clear itself.
+
+     It used to notice by watching `round` change, which quietly meant "the
+     first round number this hook ever saw is a new round" — true for a tab that
+     was here when the round turned, wrong for one that has just started up.
+     That cost nothing while a reload also cost you your seat; now that the seat
+     survives, it would have zeroed your score every time you refreshed.
+
+     So ask the board instead. Every matched card records who turned it, so the
+     pairs standing to our name in the round *currently dealt* are a fact we can
+     read rather than something to remember. Nothing of ours on the board means
+     nothing of ours on the scoreboard — which is exactly a round we did not
+     play. Mid-round, our pairs are still sitting there, and the score stands. */
   useEffect(() => {
     if (!roomId || !currentUid || !activeRoom) return;
     if (activeRoom.status !== "playing") return;
-    if (lastSeenRoundRef.current === activeRoom.round) return;
-    lastSeenRoundRef.current = activeRoom.round;
 
-    const mine = activeRoom.players[currentUid];
-    if (mine && mine.score !== 0) {
-      resetOwnScoreForNewRound(roomId, currentUid).catch(() => {});
-    }
+    const mine = activeRoom.players?.[currentUid];
+    if (!mine || mine.score === 0) return;
+    if (claimedPairs(activeRoom.gameState, currentUid) > 0) return;
+
+    resetOwnScoreForNewRound(roomId, currentUid).catch(() => {});
   }, [roomId, currentUid, activeRoom]);
 
   /* Once everyone seated has agreed to the same proposal, the seat that held
@@ -163,7 +339,9 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     if (activeRoom.gameState?.currentTurn !== currentUid) return;
     if (dealtRoundRef.current === activeRoom.round) return;
 
-    const seated = Object.keys(activeRoom.players ?? {});
+    // Only the players actually here have to agree — a seat whose player is
+    // away is being kept for them, not waited on.
+    const seated = activeOrder(activeRoom.players ?? {});
     const allReady = seated.length >= 2 && seated.every((uid) => proposal.readyPlayers?.[uid]);
     if (!allReady) return;
 
@@ -175,64 +353,29 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     });
   }, [roomId, currentUid, activeRoom]);
 
+  /* Cards this tab has sent but not yet seen come back. The snapshot is what
+     normally stops a card being tapped twice, and on a phone that round trip is
+     long enough to get a second tap in — so hold them here too. `flipCard` is
+     a compare-and-set and would refuse the duplicate anyway; this just saves
+     the trip. */
+  const inFlightRef = useRef<Set<string>>(new Set());
+
+  /** Turn a card, and nothing else. What a completed pair *means* is the resolve
+   *  effect's business — it has to be, or a turn only ends if the tab that
+   *  started it is still around to end it. */
   const handleFlipCard = async (cardId: string) => {
     if (!roomId || !activeRoom || !currentUid) return;
-    const gs = activeRoom.gameState;
-    if (!gs) return;
-    if (gs.currentTurn !== currentUid) return;
-    if (gs.flippedCards?.length >= 2) return;
+    if (activeRoom.status !== "playing") return;
+    if (inFlightRef.current.has(cardId)) return;
+    if (!isFlipAllowed(activeRoom.gameState, currentUid, cardId).allowed) return;
 
-    const card = gs.cards.find((c) => c.id === cardId);
-    if (!card || card.isFlipped || card.isMatched) return;
-
-    await flipCard(roomId, cardId);
-
-    // After flipping, check if 2 cards are now flipped
-    const newFlipped = [...gs.flippedCards || [], cardId];
-    if (newFlipped.length === 2) {
-      const [firstId, secondId] = newFlipped;
-      const first = gs.cards.find((c) => c.id === firstId)!;
-      const second = gs.cards.find((c) => c.id === secondId) ?? card;
-
-      setTimeout(async () => {
-        const matched = first.pairId === second.pairId;
-        const updatedCards: CardItem[] = gs.cards.map((c) => {
-          if (c.id === firstId || c.id === secondId) {
-            return matched
-              ? { ...c, isFlipped: true, isMatched: true, flippedBy: currentUid }
-              : { ...c, isFlipped: false };
-          }
-          return c;
-        });
-
-        const nextUid = nextPlayerUid(activeRoom.players, currentUid);
-        const newMatchedPairs = gs.matchedPairs + (matched ? 1 : 0);
-        const isComplete = newMatchedPairs >= gs.totalPairs;
-
-        if (matched) {
-          await incrementPlayerScore(roomId, currentUid);
-        }
-
-        await resolveFlip(
-          roomId,
-          updatedCards,
-          matched ? currentUid : nextUid, // on match, the same player gets another turn
-          newMatchedPairs,
-          isComplete
-        );
-
-        if (isComplete) {
-          // Put the current settings on the table so there's something to
-          // agree to (or change) right away — nobody is agreed yet.
-          await seedNextRoundProposal(
-            roomId,
-            activeRoom.gameType,
-            activeRoom.difficulty,
-            activeRoom.theme,
-            Object.keys(activeRoom.players ?? {})
-          );
-        }
-      }, 900);
+    inFlightRef.current.add(cardId);
+    try {
+      await flipCard(roomId, cardId);
+    } catch {
+      /* refused, or the write never left — the card stays face down */
+    } finally {
+      inFlightRef.current.delete(cardId);
     }
   };
 

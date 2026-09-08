@@ -83,6 +83,7 @@ export default function GameLobby() {
     roundsWon: 0,
     isReady: false,
     joinedAt: Date.now(),
+    connected: true,
   });
 
   /* Guests can set the table but not sit at it — send them to the door and

@@ -19,12 +19,17 @@ import { rtdb } from './config';
 import type {
   Room,
   RoomPlayer,
-  MultiplayerGameState,
   NextRoundProposal,
   ChatMessage,
 } from '../types/multiplayer.types';
 import type { CardItem, GameType, Difficulty, CardTheme } from '../types/game.types';
 import { pickOpponentRooms } from '../utils/matchUtils';
+import { nextPlayerUid, seatedOrder, type PairOutcome } from '../utils/flipUtils';
+
+// Seating and turn order are decided without touching the database, so they live
+// with the rest of the turn logic in `utils/flipUtils`. Re-exported here because
+// this is where callers have always reached for them.
+export { nextPlayerUid, seatedOrder };
 
 // ─── House limits ─────────────────────────────────────────────────────────────
 //
@@ -78,28 +83,33 @@ const openRoomRef = (bucket: string, roomId: string) =>
 const roomBucket = (room: Pick<Room, 'gameType' | 'difficulty' | 'theme'>) =>
   bucketKey(room.gameType, room.difficulty, room.theme);
 
-/** Take the player's seat down with them if their tab closes. */
-const armPlayerDisconnect = (roomId: string, uid: string) =>
-  onDisconnect(ref(rtdb, `rooms/${roomId}/players/${uid}`)).remove();
-
-/** Turn order has to be identical on every client, and object key order is not
- *  a promise anyone made. Seat the table by when people sat down. */
-export const seatedOrder = (players: Record<string, RoomPlayer>): string[] =>
-  Object.values(players ?? {})
-    .sort((a, b) => (a.joinedAt ?? 0) - (b.joinedAt ?? 0) || a.uid.localeCompare(b.uid))
-    .map(p => p.uid);
-
-/** The uid to the left of `currentUid`, skipping anyone who has left the table. */
-export const nextPlayerUid = (
-  players: Record<string, RoomPlayer>,
-  currentUid: string
-): string => {
-  const order = seatedOrder(players);
-  if (order.length === 0) return currentUid;
-  const idx = order.indexOf(currentUid);
-  if (idx === -1) return order[0];
-  return order[(idx + 1) % order.length];
+/**
+ * Standing instructions for a seat whose tab goes away.
+ *
+ * Before the hand is dealt the seat is given up: someone who opens a waiting
+ * room and closes it again should not hold a place the table cannot start
+ * without. Once cards are down the seat is *kept* and only marked away.
+ *
+ * That distinction is the whole reason this function takes a flag. A refresh is
+ * a two-second gap in a websocket, and it used to be indistinguishable from
+ * leaving for good: the seat was deleted, and there was no way back — a room in
+ * play refuses new seats (`joinRoom` answers 'in-play') and the rules refuse to
+ * re-create one. The player came back to their own table as a spectator, with
+ * every tap dead. Keeping the seat and marking it away costs the table nothing,
+ * because `activeOrder` moves the turn straight past it.
+ */
+export const armSeatDisconnect = async (roomId: string, uid: string, keepSeat: boolean) => {
+  const seat = onDisconnect(ref(rtdb, `rooms/${roomId}/players/${uid}`));
+  // Clear whatever was armed before: the room changes phase under a seat that
+  // was armed for the phase before it.
+  await seat.cancel();
+  await (keepSeat ? seat.update({ connected: false }) : seat.remove());
 };
+
+/** Say we are back. Only ever written for a seat that still exists, which after
+ *  the change above is what a reload finds waiting for it. */
+export const takeSeatBack = (roomId: string, uid: string) =>
+  update(ref(rtdb, `rooms/${roomId}/players/${uid}`), { connected: true });
 
 export const createRoom = async (
   hostPlayer: RoomPlayer,
@@ -139,7 +149,7 @@ export const createRoom = async (
   }
 
   await set(ref(rtdb, `rooms/${roomId}`), room);
-  await armPlayerDisconnect(roomId, hostPlayer.uid);
+  await armSeatDisconnect(roomId, hostPlayer.uid, false); // still waiting
   if (!isPrivate) {
     await set(openRoomRef(bucketKey(gameType, difficulty, theme), roomId), true);
   }
@@ -162,8 +172,12 @@ export const joinRoom = async (roomId: string, player: RoomPlayer): Promise<Join
     return 'missing';
   }
 
+  // Already seated here — coming back to a seat the table kept. That is now the
+  // ordinary case after a reload, and it is the one branch that may return to a
+  // room already in play.
   if (room.players?.[player.uid]) {
-    await armPlayerDisconnect(roomId, player.uid);
+    await armSeatDisconnect(roomId, player.uid, room.status !== 'waiting');
+    await takeSeatBack(roomId, player.uid);
     return 'joined';
   }
   if (room.status !== 'waiting') return 'in-play';
@@ -174,7 +188,7 @@ export const joinRoom = async (roomId: string, player: RoomPlayer): Promise<Join
   await update(ref(rtdb, `rooms/${roomId}/players`), {
     [player.uid]: player,
   });
-  await armPlayerDisconnect(roomId, player.uid);
+  await armSeatDisconnect(roomId, player.uid, false); // room is 'waiting' here
 
   // Two players can clear the capacity check above in the same instant: the
   // rules cap nothing (they can only see one seat at a time), and a transaction
@@ -290,7 +304,8 @@ export const disarmSearchDisconnect = async (
   theme: CardTheme
 ) => {
   await cancelSearchDisconnect(roomId, gameType, difficulty, theme);
-  await armPlayerDisconnect(roomId, uid);
+  // A search only ever holds a room that is still waiting.
+  await armSeatDisconnect(roomId, uid, false);
 };
 
 /**
@@ -332,9 +347,13 @@ export const armLastSeatDisconnect = (roomId: string) =>
 
 /** `cancel()` clears every onDisconnect at or below the path it is given, and
  *  the player's own seat sits below the room — so put that one back. */
-export const disarmLastSeatDisconnect = async (roomId: string, uid: string) => {
+export const disarmLastSeatDisconnect = async (
+  roomId: string,
+  uid: string,
+  keepSeat: boolean
+) => {
   await onDisconnect(ref(rtdb, `rooms/${roomId}`)).cancel();
-  await armPlayerDisconnect(roomId, uid);
+  await armSeatDisconnect(roomId, uid, keepSeat);
 };
 
 export const setPlayerReady = async (roomId: string, uid: string, isReady: boolean) => {
@@ -368,31 +387,66 @@ export const startGame = async (
   }
 };
 
-export const flipCard = async (roomId: string, cardId: string) => {
-  const gsRef = ref(rtdb, `rooms/${roomId}/gameState`);
-  const snap = await get(gsRef);
-  if (!snap.exists()) return;
-  const gs = snap.val() as MultiplayerGameState;
-  const flipped = [...(gs.flippedCards || []), cardId];
-  await update(gsRef, { flippedCards: flipped });
+/** What became of a tap. Anything but 'flipped' means nothing was written. */
+export type FlipResult = 'flipped' | 'duplicate' | 'pair-full' | 'refused';
+
+/**
+ * Turn a card, as a compare-and-set on `flippedCards` rather than a read
+ * followed by a write.
+ *
+ * The read-then-write version could not see a tap that was already in flight,
+ * and the rules cannot help — they can count the array to two but not tell one
+ * card from the same card twice. Two taps of one card inside a single round trip
+ * (which on a phone is most double taps) therefore wrote `[c0, c0]`: a pair that
+ * matches itself, and one that neither tap believed it had completed, so nothing
+ * ever resolved it. A transaction sees the array as it actually stands each time
+ * it runs, so the second tap has something to refuse.
+ */
+export const flipCard = async (roomId: string, cardId: string): Promise<FlipResult> => {
+  let verdict: FlipResult = 'flipped';
+  const res = await runTransaction(
+    ref(rtdb, `rooms/${roomId}/gameState/flippedCards`),
+    (current: string[] | null) => {
+      const flipped = Array.isArray(current) ? current : [];
+      if (flipped.includes(cardId)) {
+        verdict = 'duplicate';
+        return; // abort — leave the array alone
+      }
+      if (flipped.length >= 2) {
+        verdict = 'pair-full';
+        return;
+      }
+      verdict = 'flipped';
+      return [...flipped, cardId];
+    }
+  );
+  if (!res.committed && verdict === 'flipped') return 'refused';
+  return verdict;
 };
 
-export const resolveFlip = async (
-  roomId: string,
-  cards: CardItem[],
-  nextTurnUid: string,
-  newMatchedPairs: number,
-  isComplete: boolean
-) => {
+/**
+ * Finish the turn: the board, the count, the turn and the point, in one write.
+ *
+ * One write rather than two because the point and the board that earned it must
+ * not be able to arrive separately — the score rule reads `status` and
+ * `currentTurn` off the *stored* room, so both are still what they were when the
+ * pair was completed, and the whole update is refused together or lands
+ * together. `outcome` comes from `resolvePairOutcome`, which reads the room at
+ * the moment of the write; see `utils/flipUtils` for why that matters.
+ */
+export const resolvePair = async (roomId: string, outcome: PairOutcome) => {
   const updates: Record<string, unknown> = {
-    [`rooms/${roomId}/gameState/cards`]: cards,
+    [`rooms/${roomId}/gameState/cards`]: outcome.cards,
     [`rooms/${roomId}/gameState/flippedCards`]: null,
-    [`rooms/${roomId}/gameState/currentTurn`]: nextTurnUid,
-    [`rooms/${roomId}/gameState/matchedPairs`]: newMatchedPairs,
+    [`rooms/${roomId}/gameState/currentTurn`]: outcome.nextTurnUid,
+    [`rooms/${roomId}/gameState/matchedPairs`]: outcome.matchedPairs,
     [`rooms/${roomId}/gameState/turnStartedAt`]: serverTimestamp(),
   };
-  if (isComplete) {
-    // The board is clear, but the table stays seated — see endRound below.
+  if (outcome.scoringUid) {
+    updates[`rooms/${roomId}/players/${outcome.scoringUid}/score`] = outcome.newScore;
+  }
+  if (outcome.isComplete) {
+    // The board is clear, but the table stays seated — see startNextRound.
     updates[`rooms/${roomId}/status`] = 'round-finished';
     updates[`rooms/${roomId}/finishedAt`] = serverTimestamp();
   }
@@ -523,13 +577,10 @@ export const passTurn = async (roomId: string, nextTurnUid: string) => {
   });
 };
 
-/** A point, counted so that two flips landing together cannot lose one. */
-export const incrementPlayerScore = async (roomId: string, uid: string) => {
-  await runTransaction(
-    ref(rtdb, `rooms/${roomId}/players/${uid}/score`),
-    current => (current ?? 0) + 1
-  );
-};
+// The point used to be its own transaction here, landing just before the board
+// that earned it. It rides inside `resolvePair`'s single update now — a score
+// that cannot arrive without its board is worth more than one that cannot be
+// lost to an interleave, and the update is atomic either way.
 
 export const closeRoom = async (
   roomId: string,

@@ -13,6 +13,12 @@ export interface RoomPlayer {
   roundsWon: number;
   isReady: boolean;
   joinedAt: number;
+  /** Whether the tab holding this seat is currently connected. Once a hand is
+   *  in play a seat is kept when its player drops — a refresh is a two-second
+   *  gap, and it used to cost them the seat entirely — and turn order skips
+   *  seats that are away. Optional: seats written before this existed have no
+   *  flag, and are read as present. */
+  connected?: boolean;
 }
 
 /** The between-rounds negotiation: whatever the table is proposing to play next,
