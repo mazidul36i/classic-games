@@ -35,9 +35,9 @@ const GAME_CARD: Record<string, { rank: string; suit: string; red: boolean; labe
 };
 
 const NEXT_GAME_OPTIONS: { id: GameType; label: string }[] = [
+  { id: "dots-and-boxes", label: "Dots & Boxes" },
   { id: "card-flip", label: "Card Flip" },
   { id: "word-match", label: "Word Match" },
-  { id: "dots-and-boxes", label: "Dots & Boxes" },
 ];
 
 /** Only the card games are dealt from a deck. */

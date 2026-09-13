@@ -21,13 +21,29 @@ import {
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
+/* Newest at the top of the bill. The catalogue numbers follow the running
+   order, but a game's rank and suit are its own and travel with it. */
 const GAMES = [
+  {
+    id: "dots-and-boxes",
+    rank: "10",
+    suit: "♦",
+    red: true,
+    no: "No. 01",
+    title: "Dots and Boxes",
+    discipline: "Territory",
+    description:
+      "Draw a line, take a box, go again. Schoolbook margins made into a duel of patience and timing.",
+    tags: ["Table for two to four"],
+    icon: Grid2X2,
+    href: "/lobby/dots-and-boxes",
+  },
   {
     id: "card-flip",
     rank: "A",
     suit: "♠",
     red: false,
-    no: "No. 01",
+    no: "No. 02",
     title: "Card Flip Match",
     discipline: "Concentration",
     description:
@@ -41,7 +57,7 @@ const GAMES = [
     rank: "K",
     suit: "♦",
     red: true,
-    no: "No. 02",
+    no: "No. 03",
     title: "Number Sequence",
     discipline: "Order",
     description:
@@ -55,7 +71,7 @@ const GAMES = [
     rank: "Q",
     suit: "♣",
     red: false,
-    no: "No. 03",
+    no: "No. 04",
     title: "Pattern Memory",
     discipline: "Place",
     description:
@@ -69,7 +85,7 @@ const GAMES = [
     rank: "J",
     suit: "♥",
     red: true,
-    no: "No. 04",
+    no: "No. 05",
     title: "Word Match",
     discipline: "Lexicon",
     description:
@@ -77,20 +93,6 @@ const GAMES = [
     tags: ["Solo", "Table for two"],
     icon: WordIcon,
     href: "/lobby/word-match",
-  },
-  {
-    id: "dots-and-boxes",
-    rank: "10",
-    suit: "♦",
-    red: true,
-    no: "No. 05",
-    title: "Dots and Boxes",
-    discipline: "Territory",
-    description:
-      "Draw a line, take a box, go again. Schoolbook margins made into a duel of patience and timing.",
-    tags: ["Table for two"],
-    icon: Grid2X2,
-    href: "/lobby/dots-and-boxes",
   },
 ] as const;
 
@@ -107,7 +109,7 @@ const HOUSE_RULES = [
     icon: Trophy,
     kicker: "The Ledger",
     title: "Every score recorded",
-    body: "Runs are written down and ranked across all four games. The standings keep an honest account of who is sharpest this week.",
+    body: "Every solo hand is written down and ranked. The standings keep an honest account of who is sharpest this week.",
   },
   {
     numeral: "03",
@@ -131,6 +133,7 @@ const DECK_LAYOUT = [
 ];
 
 const MARQUEE_WORDS = [
+  "Territory",
   "Concentration",
   "Sequence",
   "Pattern",
@@ -401,9 +404,9 @@ export default function Home() {
               <p className="p-tick text-ink-soft mt-3">The Hand</p>
             </div>
             <h2 className="md:col-span-8 p-display text-[clamp(1.9rem,3.7vw,2.9rem)]">
-              Four games,
+              Five games,
               <br />
-              four disciplines.
+              five disciplines.
             </h2>
           </motion.div>
 

@@ -28,21 +28,21 @@ const GAME_OPTIONS: {
    *  are duels, and start as soon as two players are ready. */
   supportsSeats: boolean;
 }[] = [
+  { id: "dots-and-boxes", label: "Dots & Boxes", rank: "10", suit: "♦", red: true, supportsSolo: false, supportsMulti: true, supportDifficulty: true, usesDeck: false, supportsSeats: true },
   { id: "card-flip", label: "Card Flip", rank: "A", suit: "♠", red: false, supportsSolo: true, supportsMulti: true, supportDifficulty: true, usesDeck: true, supportsSeats: false },
   { id: "number-sequence", label: "Sequence", rank: "K", suit: "♦", red: true, supportsSolo: true, supportsMulti: false, supportDifficulty: false, usesDeck: false, supportsSeats: false },
   { id: "pattern-memory", label: "Pattern", rank: "Q", suit: "♣", red: false, supportsSolo: true, supportsMulti: false, supportDifficulty: true, usesDeck: false, supportsSeats: false },
   { id: "word-match", label: "Word Match", rank: "J", suit: "♥", red: true, supportsSolo: true, supportsMulti: true, supportDifficulty: true, usesDeck: true, supportsSeats: false },
-  { id: "dots-and-boxes", label: "Dots & Boxes", rank: "10", suit: "♦", red: true, supportsSolo: false, supportsMulti: true, supportDifficulty: true, usesDeck: false, supportsSeats: true },
 ];
 
 const DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
 const THEMES: CardTheme[] = ["colors", "emojis", "numbers", "animals", "symbols"];
 const VALID_GAME_TYPES: GameType[] = [
+  "dots-and-boxes",
   "card-flip",
   "number-sequence",
   "pattern-memory",
   "word-match",
-  "dots-and-boxes",
 ];
 
 /** Elapsed time, as a table clock reads it. */
