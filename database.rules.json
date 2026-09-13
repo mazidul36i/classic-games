@@ -51,7 +51,7 @@
         // the actual legitimacy check left to ".validate".
         "gameType": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
-          ".validate": "(newData.val() === 'card-flip' || newData.val() === 'word-match') && (!data.exists() || newData.val() === data.val() || root.child('rooms/' + $roomId + '/status').val() === 'playing')"
+          ".validate": "(newData.val() === 'card-flip' || newData.val() === 'word-match' || newData.val() === 'dots-and-boxes') && (!data.exists() || newData.val() === data.val() || root.child('rooms/' + $roomId + '/status').val() === 'playing')"
         },
         "difficulty": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()",
@@ -152,7 +152,13 @@
           // touch the board. The two exceptions are below: an expired turn may be
           // passed by anyone still at the table.
           ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists() && ((!data.exists() && root.child('rooms/' + $roomId + '/hostId').val() === auth.uid) || data.child('currentTurn').val() === auth.uid)",
-          ".validate": "newData.hasChildren(['cards', 'currentTurn', 'matchedPairs', 'totalPairs', 'turnStartedAt'])",
+          // Two shapes sit here: a deck (cards/matchedPairs/totalPairs) and a
+          // Dots and Boxes grid (gridSize, with edges/boxes filling in as they
+          // are drawn). Which one is decided by the shape itself rather than by
+          // reading the room's gameType, because dealing a new round writes
+          // gameType and gameState together and a field cannot reliably see a
+          // sibling's brand-new value — see startNextRound.
+          ".validate": "newData.hasChildren(['currentTurn', 'turnStartedAt']) && (newData.hasChildren(['cards', 'matchedPairs', 'totalPairs']) || newData.hasChildren(['gridSize']))",
 
           "cards": { ".validate": "newData.hasChildren()" },
           "currentTurn": {
@@ -178,6 +184,41 @@
           "totalPairs": {
             ".validate": "newData.isNumber() && newData.val() > 0 && (!data.exists() || newData.val() === data.val() || root.child('rooms/' + $roomId + '/status').val() === 'playing')"
           },
+
+          // ── Dots and Boxes ──────────────────────────────────────────────
+          // Boxes per side; a 4×4 board is 5×5 dots. Set on the deal, from the
+          // room's difficulty — the same three settings the card games use.
+          "gridSize": {
+            ".validate": "newData.isNumber() && newData.val() >= 3 && newData.val() <= 8"
+          },
+          // A line, and who drew it. This is the one thing in the whole project
+          // the rules can genuinely enforce about a game's fairness: a line is
+          // drawn **once**, by the player holding the turn, under their own name.
+          // `!data.exists()` is what makes it once — a claimed line can never be
+          // rewritten to someone else.
+          //
+          // Both maps are absent on a fresh board. The database cannot store an
+          // empty one, which is also why neither is in the required-children
+          // list above.
+          "edges": {
+            ".validate": "newData.hasChildren()",
+            "$edgeId": {
+              ".validate": "newData.isString() && !data.exists() && newData.val() === auth.uid && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()"
+            }
+          },
+          // Known gap, the same one `matchedPairs` has: whether the four lines
+          // around this box are actually drawn is not checkable from here —
+          // working out which four would need string parsing and arithmetic on
+          // the box's own key, and these rules have neither. What is checked is
+          // that a box is closed once, by the player whose turn it is, for
+          // themselves. Working out *which* boxes a line closed is the client's,
+          // exactly as a claimed pair already is.
+          "boxes": {
+            ".validate": "newData.hasChildren()",
+            "$boxId": {
+              ".validate": "newData.isString() && !data.exists() && newData.val() === auth.uid && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists()"
+            }
+          },
           "$other": { ".validate": false }
         },
 
@@ -199,7 +240,7 @@
           ".write": "auth != null && root.child('rooms/' + $roomId + '/players/' + auth.uid).exists() && (root.child('rooms/' + $roomId + '/status').val() === 'round-finished' || !newData.exists())",
           ".validate": "!newData.exists() || newData.hasChildren(['gameType', 'difficulty', 'theme', 'readyPlayers'])",
 
-          "gameType": { ".validate": "newData.val() === 'card-flip' || newData.val() === 'word-match'" },
+          "gameType": { ".validate": "newData.val() === 'card-flip' || newData.val() === 'word-match' || newData.val() === 'dots-and-boxes'" },
           "difficulty": { ".validate": "newData.val() === '4x4' || newData.val() === '6x6' || newData.val() === '8x8'" },
           "theme": { ".validate": "newData.isString() && newData.val().length <= 20" },
           "readyPlayers": {

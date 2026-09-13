@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { play } from "../audio/cues";
+import { isCardBoard } from "../utils/flipUtils";
+import { isDotsBoard, roundWinner } from "../utils/dotsUtils";
 import type { Room, RoomPlayer } from "../types/multiplayer.types";
 
 /**
@@ -25,6 +27,14 @@ const rankByScore = (players: Record<string, RoomPlayer>): RoomPlayer[] =>
     (a, b) => b.score - a.score || a.uid.localeCompare(b.uid)
   );
 
+/** Who the room is about to credit the round to — the same reading
+ *  `useMultiplayer` uses, so the bell agrees with the scoreboard. A level dots
+ *  board goes to nobody, and everyone hears the same thing for it. */
+const victor = (room: Room): string | null =>
+  isDotsBoard(room.gameState)
+    ? roundWinner(room.players, room.gameState)
+    : rankByScore(room.players)[0]?.uid ?? null;
+
 export const useRoomSounds = (room: Room | null, currentUid: string | null): void => {
   const seenRef = useRef<Room | null>(null);
 
@@ -46,11 +56,11 @@ export const useRoomSounds = (room: Room | null, currentUid: string | null): voi
        cleared to null by `passTurn`, so these have to be read as counts and
        compared as a strict growth. Anything looser fires a card snap at the
        start of every round. */
-    const wasFlipped = before?.flippedCards?.length ?? 0;
-    const nowFlipped = after?.flippedCards?.length ?? 0;
+    const wasFlipped = isCardBoard(before) ? before.flippedCards?.length ?? 0 : 0;
+    const nowFlipped = isCardBoard(after) ? after.flippedCards?.length ?? 0 : 0;
     if (before && after && nowFlipped > wasFlipped) play("flip");
 
-    if (before && after) {
+    if (isCardBoard(before) && isCardBoard(after)) {
       if (after.matchedPairs > before.matchedPairs) {
         play("match");
       } else if (wasFlipped === 2 && nowFlipped === 0) {
@@ -59,6 +69,16 @@ export const useRoomSounds = (room: Room | null, currentUid: string | null): voi
            a different event and gets its own cue below. */
         play("miss");
       }
+    }
+
+    /* A line drawn, and the box it closed. Counted the same way and for the
+       same reason: both maps are absent until something is in them, so growth
+       is the only reading that does not fire on a freshly dealt board. */
+    if (isDotsBoard(before) && isDotsBoard(after)) {
+      const drawn = Object.keys(after.edges ?? {}).length;
+      const closed = Object.keys(after.boxes ?? {}).length;
+      if (closed > Object.keys(before.boxes ?? {}).length) play("match");
+      else if (drawn > Object.keys(before.edges ?? {}).length) play("flip");
     }
 
     const beforeTurn = before?.currentTurn ?? null;
@@ -79,9 +99,7 @@ export const useRoomSounds = (room: Room | null, currentUid: string | null): voi
 
     if (previous.status === "playing" && room.status === "round-finished") {
       // Held back so it lands after the final match has rung out.
-      play(rankByScore(room.players)[0]?.uid === currentUid ? "win" : "bust", {
-        delay: 0.32,
-      });
+      play(victor(room) === currentUid ? "win" : "bust", { delay: 0.32 });
     }
   }, [room, currentUid]);
 };

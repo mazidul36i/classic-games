@@ -281,6 +281,47 @@ than a point or comes from the wrong seat.
 
 ---
 
+### 0.12 Refreshing the round-over screen credits another round win — **open, and live**
+
+Found while playtesting Dots and Boxes against the emulators, but it is not
+that game's bug — the credit effect is shared, so Card Flip and Word Match do
+it too. Reload the page while the round-over panel is up and the winner's
+`roundsWon` goes up again. Observed going 1 → 2 → 3 on two reloads.
+
+The guard is `creditedRoundRef` in `src/hooks/useMultiplayer.ts`, an in-memory
+ref that starts out null on every mount. The room is still `round-finished` and
+the same player is still ahead, so the effect credits the same round again. The
+rules cannot stop it: they allow `roundsWon` to rise by one while the room is
+between rounds, and cannot tell a first credit from a second.
+
+Same shape as the round-reset bug in 0.10 — a ref is not a record. **Do:** put
+the round the win was credited for on the seat (`wonRound`, with a rules clause
+pinning it to the room's current `round`) and credit only when it does not
+already match. The scoreboard is then a fact about the room rather than
+something one tab remembers.
+
+### 0.13 A next round dealt more than 45s after the last one fails — **open, and live**
+
+Also found playtesting Dots and Boxes, also not that game's bug. `startNextRound`
+is deliberately two writes (see `MULTIPLAYER_ROUNDS.md`): flip `status` to
+`playing`, then lay down `round`/`gameType`/`gameState`. Between the two, the
+room is `playing` with the *previous* round's `turnStartedAt` still on it — so
+if the table took longer than the 45s turn limit to agree on what to play next,
+every client's expiry effect fires the instant the first write lands and passes
+the turn. The deal's second write is then refused with `permission_denied`,
+because `gameState`'s `.write` requires the writer to still hold `currentTurn`.
+
+The table is left mid-deal: `status: 'playing'`, `round` unchanged, the finished
+board still on screen, `nextRound` still standing. Reproduced by leaving the
+round-over panel open a couple of minutes and then agreeing.
+
+Deliberating for 45 seconds over the next round is completely ordinary, so this
+is likely to be hit often. **Do:** either stamp `turnStartedAt` in the same
+write that flips `status` (the expiry check then has a fresh clock to measure
+against), or have the expiry effect ignore a board whose round has already been
+won. Worth fixing with 0.9 — both are the expiry effect writing when it should
+not.
+
 ## Phase 1 — Make the table trustworthy without a server — **shipped**
 
 Multiplayer used to work because everyone was polite: every rule was enforced in
@@ -556,9 +597,25 @@ believe in them. All of these still fit inside the free plan.
   archetypal phone-in-a-queue activity, and all of them except multiplayer work
   offline in principle. On this plan it pays twice: a cached shell is transfer the
   hosting quota never has to spend again.
-- **A fifth game with a different shape.** All four current games are recall
-  tests. Something with working-memory pressure — an n-back, or a "what changed"
-  spot-the-difference — would broaden the appeal without breaking the theme.
+- **A fifth game with a different shape — shipped, as Dots and Boxes.** It went
+  further than this entry imagined: not another recall test but a strategy game,
+  the first table where the board is not a deck, and the first that seats more
+  than two. The room machinery turned out to be almost entirely game-agnostic —
+  seats, presence, the turn clock, chat and the round consensus all carried over
+  untouched, and only two decisions in `useMultiplayer` were ever about cards
+  (what to deal, and how to rank the seats). The parts that are specific live in
+  `src/utils/dotsUtils.ts` and `src/components/game/DotsBoard.tsx`. Connect Four
+  is meant to follow the same seam. A recall-pressure game — an n-back, or a
+  "what changed" — is still open and would broaden the appeal a different way.
+- **Tables of three and four — shipped with it.** The host picks the seats in the
+  lobby, each seat draws under its own suit and ink, and the hand is dealt only
+  once every seat is taken (a room in play refuses new ones). Quick match fills
+  the whole table rather than pairing off, which is why the matchmaking bucket
+  now carries the seat count. Worth knowing what this costs: a four-hander needs
+  four strangers in the same bucket inside the search window, so on a quiet day
+  quick match at four will usually time out and a private room is the realistic
+  way to fill one. The card games could take the same seats control the day they
+  want it — nothing in it is specific to this game except which flag turns it on.
 - **Difficulty that adapts.** Three fixed sizes are coarse. Tuning the board to a
   player's measured accuracy would keep the middle of the skill curve engaged, and
   the data to do it is already in `gameHistory` — once 0.7 stops throwing some of

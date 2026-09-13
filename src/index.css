@@ -1245,6 +1245,116 @@ body {
   justify-content: center;
 }
 
+/* ── Dots and Boxes: ruled paper laid on the baize ──
+   One grid does the whole board by alternating track sizes — a dot track, then
+   a span track, and so on — so every line and every box is a plain cell. The
+   spans size themselves off the viewport, the way the card board does. */
+.p-dots {
+  --dot: 0.4rem;
+  /* The span shrinks to fit a narrow screen, but its ceiling is a share of a
+     fixed board rather than a fixed length — so a short 4×4 game is drawn at
+     the same size as a long 8×8 one instead of sitting tiny in the middle of
+     the baize. */
+  --span: clamp(
+    0.95rem,
+    calc((100vw - 8rem - (var(--dots-grid) + 1) * var(--dot)) / var(--dots-grid)),
+    calc(23rem / var(--dots-grid))
+  );
+  display: grid;
+  grid-template-columns: repeat(var(--dots-grid), var(--dot) var(--span)) var(--dot);
+  grid-template-rows: repeat(var(--dots-grid), var(--dot) var(--span)) var(--dot);
+  place-items: center;
+  width: fit-content;
+  margin-inline: auto;
+}
+
+.p-dots-dot {
+  width: var(--dot);
+  height: var(--dot);
+  border-radius: 50%;
+  background: rgba(242, 236, 225, 0.75);
+}
+
+/* The tappable slot is the whole cell; the line drawn inside it is thinner. */
+.p-dots-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.p-dots-slot:disabled { cursor: default; }
+
+.p-dots-line {
+  display: block;
+  border-radius: 2px;
+  background: rgba(242, 236, 225, 0.14);
+  transition: background-color 220ms ease, transform 220ms ease;
+}
+
+.p-dots-slot-h .p-dots-line { width: 100%; height: 3px; }
+.p-dots-slot-v .p-dots-line { width: 3px; height: 100%; }
+
+/* An open line answers the pointer; a drawn one is simply there. */
+.p-dots-slot:not(:disabled):hover .p-dots-line,
+.p-dots-slot:not(:disabled):focus-visible .p-dots-line {
+  background: rgba(242, 236, 225, 0.55);
+}
+
+.p-dots-slot:focus-visible {
+  outline: 2px solid var(--color-brass);
+  outline-offset: -2px;
+}
+
+.p-dots-drawn .p-dots-line {
+  background: var(--ink);
+  box-shadow: 0 0 0 1px rgba(23, 19, 14, 0.25);
+}
+
+.p-dots-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-variant-emoji: text;
+  font-size: calc(var(--span) * 0.46);
+  line-height: 1;
+  color: transparent;
+  transition: background-color 260ms ease, color 260ms ease, box-shadow 260ms ease;
+}
+
+/* A claimed box wears its owner's suit inside a border of their own ink, drawn
+   just within the four lines rather than on top of them — at a table of four,
+   the colour groups the board and the suit says who without the ambiguity two
+   players sharing an initial would bring. */
+.p-dots-closed {
+  background: color-mix(in srgb, var(--ink) 20%, transparent);
+  box-shadow: inset 0 0 0 2px var(--ink);
+  color: var(--ink);
+}
+
+/* The four inks a table draws in, paired with SEAT_SUITS in `utils/dotsUtils`.
+   Each one has to carry twice — on the dark baize where the board is drawn, and
+   on the parchment of the seat plates beside a name — so all four are mid-tone.
+   A cream or a near-black would vanish on one ground or the other. */
+.p-ink-1 { --ink: var(--color-vermilion); }   /* ♥ */
+.p-ink-2 { --ink: var(--color-brass); }       /* ♦ */
+.p-ink-3 { --ink: #5590aa; }                  /* ♠ */
+.p-ink-4 { --ink: #9b6fa8; }                  /* ♣ */
+
+/* The same mark beside a name, on the seat plates and the round's standings. */
+.p-ink-mark {
+  color: var(--ink);
+  font-variant-emoji: text;
+}
+
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
   .p-icon-btn,
@@ -1253,7 +1363,9 @@ body {
   .p-tile,
   .p-word,
   .p-nav-sound,
-  .p-navlink { transition-duration: 1ms; }
+  .p-navlink,
+  .p-dots-line,
+  .p-dots-box { transition-duration: 1ms; }
 }
 
 /* ── Anything printed on the baize flips to the light ink ── */

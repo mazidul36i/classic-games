@@ -1,5 +1,10 @@
 import type { CardItem } from '../types/game.types';
-import type { Room, MultiplayerGameState, RoomPlayer } from '../types/multiplayer.types';
+import type {
+  Room,
+  MultiplayerGameState,
+  RoomGameState,
+  RoomPlayer,
+} from '../types/multiplayer.types';
 
 /**
  * The rules of a multiplayer turn, with no Firebase in them.
@@ -21,6 +26,24 @@ import type { Room, MultiplayerGameState, RoomPlayer } from '../types/multiplaye
 /** How long a completed pair is held face up before it resolves. Long enough to
  *  read across the table, short enough not to feel like a hang. */
 export const REVEAL_MS = 900;
+
+/** Not every table is playing cards. Anything here that reaches past
+ *  `currentTurn` has to know it is looking at a deck. */
+export const isCardBoard = (
+  gs: RoomGameState | null | undefined
+): gs is MultiplayerGameState => Boolean(gs && 'cards' in gs);
+
+/** A deck as it is dealt. The pair count is the deck's own business, which is
+ *  why it is worked out here rather than at each of the two call sites. */
+export const cardBoard = (
+  cards: CardItem[],
+  firstPlayerUid: string
+): Omit<MultiplayerGameState, 'turnStartedAt' | 'flippedCards'> => ({
+  cards,
+  currentTurn: firstPlayerUid,
+  matchedPairs: 0,
+  totalPairs: cards.length / 2,
+});
 
 /** Whether the tab holding a seat is here. A seat written before presence
  *  existed carries no flag, and is read as present — an old room should not
@@ -89,11 +112,11 @@ export type FlipVerdict = { allowed: true } | { allowed: false; reason: FlipRefu
  * are in flight at once.
  */
 export const isFlipAllowed = (
-  gs: MultiplayerGameState | null | undefined,
+  gs: RoomGameState | null | undefined,
   uid: string,
   cardId: string
 ): FlipVerdict => {
-  if (!gs) return { allowed: false, reason: 'no-board' };
+  if (!isCardBoard(gs)) return { allowed: false, reason: 'no-board' };
   if (gs.currentTurn !== uid) return { allowed: false, reason: 'not-your-turn' };
 
   const flipped = gs.flippedCards ?? [];
@@ -114,9 +137,12 @@ export const isFlipAllowed = (
  * remember across a reload.
  */
 export const claimedPairs = (
-  gs: MultiplayerGameState | null | undefined,
+  gs: RoomGameState | null | undefined,
   uid: string
-): number => (gs?.cards ?? []).filter(c => c.isMatched && c.flippedBy === uid).length / 2;
+): number =>
+  isCardBoard(gs)
+    ? (gs.cards ?? []).filter(c => c.isMatched && c.flippedBy === uid).length / 2
+    : 0;
 
 /** Everything the resolving write needs, worked out from the room it read. */
 export interface PairOutcome {
@@ -147,7 +173,7 @@ export const resolvePairOutcome = (
   uid: string
 ): PairOutcome | null => {
   const gs = room?.gameState;
-  if (!room || !gs) return null;
+  if (!room || !isCardBoard(gs)) return null;
   if (room.status !== 'playing') return null;
   if (gs.currentTurn !== uid) return null;
 

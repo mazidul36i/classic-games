@@ -12,8 +12,8 @@ import {
   MATCH_TIMEOUT_MS,
   MATCH_POLL_MS,
 } from "../firebase/realtime";
+import type { TableKey } from "../firebase/realtime";
 import type { RoomPlayer } from "../types/multiplayer.types";
-import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 import { play } from "../audio/cues";
 
 export type MatchPhase = "idle" | "searching" | "matched" | "timed-out" | "error";
@@ -22,8 +22,12 @@ export type MatchPhase = "idle" | "searching" | "matched" | "timed-out" | "error
 interface Search {
   cancelled: boolean;
   startedAt: number;
+  uid: string;
+  /** The table we are holding open, if we opened one rather than joined one. */
   ownRoomId: string | null;
-  table: { gameType: GameType; difficulty: Difficulty; theme: CardTheme };
+  /** Wherever we are actually sitting — ours or someone else's. */
+  seatedIn: string | null;
+  table: TableKey;
   unsubRoom: (() => void) | null;
 }
 
@@ -45,27 +49,47 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
   const [phase, setPhase] = useState<MatchPhase>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState("");
+  /* How many are sitting at the table we are holding. Drawn in the search
+     panel, and read by the poll loop — which runs outside React and so needs
+     the ref rather than the state. */
+  const [seated, setSeatedState] = useState(0);
+  const seatedRef = useRef(0);
+  const setSeated = useCallback((count: number) => {
+    seatedRef.current = count;
+    setSeatedState(count);
+  }, []);
   const searchRef = useRef<Search | null>(null);
   const matchedRef = useRef(onMatched);
   useEffect(() => {
     matchedRef.current = onMatched;
   }, [onMatched]);
 
-  /* Take down whatever a search left standing: the room watcher, the table we
-     were holding open, and its pointer in the index. Safe to call twice. */
-  const teardown = useCallback(async (search: Search, closeOwnRoom: boolean) => {
+  /* Take down whatever a search left standing: the room watcher, the seat we
+     were holding, and — if we were the only one at it — the table itself.
+     Safe to call twice.
+
+     We stand up rather than close the room outright, because a table waiting on
+     its third player already has a second one sitting at it, and taking the
+     room away would take their game with it. `leaveRoom` closes the room behind
+     the last player to stand up, which is the case this used to handle. */
+  const teardown = useCallback(async (search: Search, giveUpSeat: boolean) => {
     search.cancelled = true;
     search.unsubRoom?.();
     search.unsubRoom = null;
-    if (closeOwnRoom && search.ownRoomId) {
-      const roomId = search.ownRoomId;
-      search.ownRoomId = null;
-      // Withdraw the standing "delete this on disconnect" first: the room is
-      // about to go by hand, and a code could in principle be dealt again.
-      const { gameType, difficulty, theme } = search.table;
-      await cancelSearchDisconnect(roomId, gameType, difficulty, theme).catch(() => {});
-      await closeRoom(roomId, { isPrivate: false, ...search.table }).catch(() => {});
+    if (!giveUpSeat) return;
+
+    const roomId = search.seatedIn;
+    const ownRoomId = search.ownRoomId;
+    search.seatedIn = null;
+    search.ownRoomId = null;
+    if (!roomId) return;
+
+    // Withdraw the standing "delete this on disconnect" first: the seat is
+    // about to go by hand, and the room may well outlive us now.
+    if (ownRoomId) {
+      await cancelSearchDisconnect(ownRoomId, search.table).catch(() => {});
     }
+    await leaveRoom(roomId, search.uid).catch(() => {});
   }, []);
 
   /* A tab closing mid-search is covered by `armSearchDisconnect` on the server
@@ -93,29 +117,28 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
     searchRef.current = null;
     setPhase("idle");
     setElapsedMs(0);
+    setSeated(0);
     if (search && !search.cancelled) await teardown(search, true);
-  }, [teardown]);
+  }, [teardown, setSeated]);
 
   const start = useCallback(
-    async (
-      player: RoomPlayer,
-      gameType: GameType,
-      difficulty: Difficulty,
-      theme: CardTheme
-    ) => {
+    async (player: RoomPlayer, table: TableKey) => {
       const previous = searchRef.current;
       if (previous && !previous.cancelled) await teardown(previous, true);
 
       const search: Search = {
         cancelled: false,
         startedAt: Date.now(),
+        uid: player.uid,
         ownRoomId: null,
-        table: { gameType, difficulty, theme },
+        seatedIn: null,
+        table,
         unsubRoom: null,
       };
       searchRef.current = search;
       setError("");
       setElapsedMs(0);
+      setSeated(0);
       setPhase("searching");
 
       /* Whoever gets there first — the watcher on our own table, or the sweep —
@@ -130,36 +153,50 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
         matchedRef.current(roomId);
       };
 
+      /* Watch the table we are sitting at until it is full.
+         Two thresholds, not one: the search ends when every seat is taken, but
+         the standing "remove this room if my tab dies" has to go the moment a
+         *second* player sits down — past that the table is somebody else's game
+         too, and it should outlive us. */
+      const watch = (roomId: string, ourTable: boolean) =>
+        subscribeToRoom(roomId, (room) => {
+          if (!room || search.cancelled) return;
+          const count = Object.keys(room.players ?? {}).length;
+          setSeated(count);
+          if (ourTable && count >= 2 && search.ownRoomId) {
+            search.ownRoomId = null;
+            void disarmSearchDisconnect(roomId, player.uid, table).catch(() => {});
+          }
+          if (count >= table.seats) settle(roomId);
+        });
+
       try {
         // 1. Somebody may already be waiting. Sit down before opening anything.
-        const waiting = await sweepForOpponent(player, gameType, difficulty, theme, null);
+        const waiting = await sweepForOpponent(player, table, null);
         if (search.cancelled) {
           if (waiting) await leaveRoom(waiting, player.uid).catch(() => {});
           return;
         }
         if (waiting) {
-          settle(waiting);
+          // Their table, now partly ours. Nothing left to sweep for — we have a
+          // seat — so just wait for the rest of the table to arrive.
+          search.seatedIn = waiting;
+          search.unsubRoom = watch(waiting, false);
           return;
         }
 
         // 2. Nobody about. Open a table and tell the index where it is.
-        const ownRoomId = await openQuickMatchRoom(player, gameType, difficulty, theme);
+        const ownRoomId = await openQuickMatchRoom(player, table);
         search.ownRoomId = ownRoomId;
+        search.seatedIn = ownRoomId;
         if (search.cancelled) {
-          await closeRoom(ownRoomId, { isPrivate: false, gameType, difficulty, theme });
+          await closeRoom(ownRoomId, { isPrivate: false, maxPlayers: table.seats, ...table });
           return;
         }
-        await armSearchDisconnect(ownRoomId, gameType, difficulty, theme);
+        await armSearchDisconnect(ownRoomId, table);
 
-        // 3. Someone sitting down at our table ends the search at once — no
-        //    need to wait for the next sweep to notice them.
-        search.unsubRoom = subscribeToRoom(ownRoomId, (room) => {
-          if (!room || search.cancelled) return;
-          if (Object.keys(room.players ?? {}).length < 2) return;
-          void disarmSearchDisconnect(ownRoomId, player.uid, gameType, difficulty, theme)
-            .catch(() => {})
-            .then(() => settle(ownRoomId));
-        });
+        // 3. Watch our own table fill.
+        search.unsubRoom = watch(ownRoomId, true);
 
         // 4. Meanwhile keep reading the index. A table that opened in the same
         //    second as ours was invisible to step 1 and shows up here.
@@ -167,21 +204,20 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
           await sleep(MATCH_POLL_MS);
           if (search.cancelled) return;
 
-          if (Date.now() - search.startedAt >= MATCH_TIMEOUT_MS) {
+          /* The clock only runs while we are sitting alone. Once somebody has
+             joined, the table is really forming and giving up on it would strand
+             them; the player can still stop the search by hand. */
+          const alone = seatedRef.current <= 1;
+          if (alone && Date.now() - search.startedAt >= MATCH_TIMEOUT_MS) {
             await teardown(search, true);
             searchRef.current = null;
             setPhase("timed-out");
             play("bust");
             return;
           }
+          if (!alone) continue; // ours is filling — do not go and sit elsewhere
 
-          const other = await sweepForOpponent(
-            player,
-            gameType,
-            difficulty,
-            theme,
-            search.ownRoomId
-          );
+          const other = await sweepForOpponent(player, table, search.ownRoomId);
           if (search.cancelled) {
             // Our own table filled up while we were sitting down elsewhere.
             if (other) await leaveRoom(other, player.uid).catch(() => {});
@@ -189,21 +225,17 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
           }
           if (other) {
             await teardown(search, true); // take our empty table down behind us
-            search.cancelled = false; // ...but the search itself still succeeded
-            settle(other);
+            search.cancelled = false; // ...but the search itself still runs
+            search.seatedIn = other;
+            search.unsubRoom = watch(other, false);
             return;
           }
 
           // A sweep retracts the pointer of any table it could not sit at, and
           // another player's sweep can judge ours wrongly (it may read the room
           // a moment before our own seat lands). Re-assert our pointer.
-          if (search.ownRoomId) {
-            await publishOpenRoom(
-              search.ownRoomId,
-              gameType,
-              difficulty,
-              theme
-            ).catch(() => {});
+          if (search.seatedIn) {
+            await publishOpenRoom(search.seatedIn, table).catch(() => {});
           }
         }
       } catch (err) {
@@ -219,13 +251,15 @@ export const useQuickMatch = (onMatched: (roomId: string) => void) => {
         play("wrong");
       }
     },
-    [teardown]
+    [teardown, setSeated]
   );
 
   return {
     phase,
     error,
     elapsedMs,
+    /** Players sitting at the table we are holding, us included. */
+    seated,
     searching: phase === "searching",
     start,
     cancel,

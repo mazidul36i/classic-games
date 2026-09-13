@@ -12,25 +12,38 @@ import type { RoomPlayer } from "../types/multiplayer.types";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-/* The four games keep the card identities the front page gave them. */
+/* The games keep the card identities the front page gave them. Dots and Boxes
+   is the one that cannot be played alone — it is a game against someone. */
 const GAME_OPTIONS: {
   id: GameType;
   label: string;
   rank: string;
   suit: string;
   red: boolean;
+  supportsSolo: boolean;
   supportsMulti: boolean;
   supportDifficulty: boolean;
+  usesDeck: boolean;
+  /** Whether the host chooses how many seats the table has. Games without it
+   *  are duels, and start as soon as two players are ready. */
+  supportsSeats: boolean;
 }[] = [
-  { id: "card-flip", label: "Card Flip", rank: "A", suit: "♠", red: false, supportsMulti: true, supportDifficulty: true },
-  { id: "number-sequence", label: "Sequence", rank: "K", suit: "♦", red: true, supportsMulti: false, supportDifficulty: false },
-  { id: "pattern-memory", label: "Pattern", rank: "Q", suit: "♣", red: false, supportsMulti: false, supportDifficulty: true },
-  { id: "word-match", label: "Word Match", rank: "J", suit: "♥", red: true, supportsMulti: true, supportDifficulty: true },
+  { id: "card-flip", label: "Card Flip", rank: "A", suit: "♠", red: false, supportsSolo: true, supportsMulti: true, supportDifficulty: true, usesDeck: true, supportsSeats: false },
+  { id: "number-sequence", label: "Sequence", rank: "K", suit: "♦", red: true, supportsSolo: true, supportsMulti: false, supportDifficulty: false, usesDeck: false, supportsSeats: false },
+  { id: "pattern-memory", label: "Pattern", rank: "Q", suit: "♣", red: false, supportsSolo: true, supportsMulti: false, supportDifficulty: true, usesDeck: false, supportsSeats: false },
+  { id: "word-match", label: "Word Match", rank: "J", suit: "♥", red: true, supportsSolo: true, supportsMulti: true, supportDifficulty: true, usesDeck: true, supportsSeats: false },
+  { id: "dots-and-boxes", label: "Dots & Boxes", rank: "10", suit: "♦", red: true, supportsSolo: false, supportsMulti: true, supportDifficulty: true, usesDeck: false, supportsSeats: true },
 ];
 
 const DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
 const THEMES: CardTheme[] = ["colors", "emojis", "numbers", "animals", "symbols"];
-const VALID_GAME_TYPES: GameType[] = ["card-flip", "number-sequence", "pattern-memory", "word-match"];
+const VALID_GAME_TYPES: GameType[] = [
+  "card-flip",
+  "number-sequence",
+  "pattern-memory",
+  "word-match",
+  "dots-and-boxes",
+];
 
 /** Elapsed time, as a table clock reads it. */
 const asClock = (ms: number) => {
@@ -42,6 +55,23 @@ const DIFFICULTY_NOTE: Record<Difficulty, string> = {
   "4x4": "Eight pairs — a short hand.",
   "6x6": "Eighteen pairs — the standard game.",
   "8x8": "Thirty-two pairs — the long night.",
+};
+
+/* The same setting, spent on a board instead of a deck. */
+const BOARD_NOTE: Record<Difficulty, string> = {
+  "4x4": "Sixteen boxes — a short game.",
+  "6x6": "Thirty-six boxes — the standard board.",
+  "8x8": "Sixty-four boxes — the long night.",
+};
+
+/* A table of four is the house limit, and the rules agree — see `maxPlayers`
+   in database.rules.json. Each seat draws in its own ink under its own suit. */
+const SEAT_COUNTS = [2, 3, 4] as const;
+
+const SEATS_NOTE: Record<number, string> = {
+  2: "Two players — hearts and diamonds.",
+  3: "Three players — hearts, diamonds and spades.",
+  4: "Four players — the full deck of suits.",
 };
 
 export default function GameLobby() {
@@ -60,6 +90,8 @@ export default function GameLobby() {
   const difficulty: Difficulty = DIFFICULTIES.includes(rawDifficulty) ? rawDifficulty : "4x4";
   const rawTheme = searchParams.get("theme") as CardTheme;
   const theme: CardTheme = THEMES.includes(rawTheme) ? rawTheme : "emojis";
+  const rawSeats = Number(searchParams.get("seats"));
+  const chosenSeats: number = SEAT_COUNTS.includes(rawSeats as 2 | 3 | 4) ? rawSeats : 2;
 
   const [roomCode, setRoomCode] = useState("");
   const [joining, setJoining] = useState(false);
@@ -74,6 +106,16 @@ export default function GameLobby() {
 
   const selectedGame = GAME_OPTIONS.find((g) => g.id === gameType)!;
   const busy = creating || joining || match.searching;
+
+  /* A game with no deck still has to sit in some matchmaking bucket — and the
+     bucket is keyed by the deck. Two players who never saw the deck picker must
+     not be sorted into different buckets by whatever `?theme` they happened to
+     arrive carrying, so those games all queue under one. */
+  const tableTheme: CardTheme = selectedGame.usesDeck ? theme : "emojis";
+  const isDots = gameType === "dots-and-boxes";
+  /* A game without a seats control is a duel, and always has been. */
+  const seats = selectedGame.supportsSeats ? chosenSeats : 2;
+  const table = { gameType, difficulty, theme: tableTheme, seats };
 
   const asPlayer = (): RoomPlayer => ({
     uid: user!.uid,
@@ -110,6 +152,13 @@ export default function GameLobby() {
     }, { replace: true });
   };
 
+  const handleSeatsChange = (n: number) => {
+    setSearchParams((prev) => {
+      prev.set("seats", String(n));
+      return prev;
+    }, { replace: true });
+  };
+
   const handleSinglePlay = () => {
     const table = `/play/${gameType}?difficulty=${difficulty}&theme=${theme}`;
     if (!isAuthenticated || !user) {
@@ -135,7 +184,9 @@ export default function GameLobby() {
     setCreating(true);
     setError("");
     try {
-      const roomId = await createRoom(asPlayer(), gameType, difficulty, theme);
+      const roomId = await createRoom(asPlayer(), gameType, difficulty, tableTheme, {
+        maxPlayers: seats,
+      });
       navigate(`/room/${roomId}`);
     } catch (err) {
       // A bare `catch {}` here once hid a PERMISSION_DENIED for days: the room
@@ -185,7 +236,7 @@ export default function GameLobby() {
       return;
     }
     setError("");
-    void match.start(asPlayer(), gameType, difficulty, theme);
+    void match.start(asPlayer(), table);
   };
 
   return (
@@ -215,7 +266,7 @@ export default function GameLobby() {
           <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
             <div className="p-panel-head">
               <span className="p-tick">The game</span>
-              <span className="p-tick">Four on offer</span>
+              <span className="p-tick">Five on offer</span>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               {GAME_OPTIONS.map((game) => (
@@ -242,7 +293,7 @@ export default function GameLobby() {
           {selectedGame.supportDifficulty && (
             <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
               <div className="p-panel-head">
-                <span className="p-tick">Length of hand</span>
+                <span className="p-tick">{isDots ? "Size of board" : "Length of hand"}</span>
               </div>
               <div className="flex gap-2.5">
                 {DIFFICULTIES.map((d) => (
@@ -259,12 +310,35 @@ export default function GameLobby() {
                 ))}
               </div>
               <p className="text-[0.92rem] leading-[1.7] text-ink-soft mt-4">
-                {DIFFICULTY_NOTE[difficulty]}
+                {(isDots ? BOARD_NOTE : DIFFICULTY_NOTE)[difficulty]}
               </p>
             </section>
           )}
 
-          {(gameType === "card-flip" || gameType === "word-match") && (
+          {selectedGame.supportsSeats && (
+            <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
+              <div className="p-panel-head">
+                <span className="p-tick">Seats at the table</span>
+              </div>
+              <div className="flex gap-2.5">
+                {SEAT_COUNTS.map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => handleSeatsChange(n)}
+                    aria-pressed={seats === n}
+                    className={`p-opt flex-1 ${seats === n ? "p-opt-on" : ""}`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[0.92rem] leading-[1.7] text-ink-soft mt-4">
+                {SEATS_NOTE[seats]} The hand is dealt once every seat is taken.
+              </p>
+            </section>
+          )}
+
+          {selectedGame.usesDeck && (
             <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
               <div className="p-panel-head">
                 <span className="p-tick">The deck</span>
@@ -287,23 +361,27 @@ export default function GameLobby() {
 
         {/* ── Taking a seat ── */}
         <div className="lg:col-span-5 space-y-7 lg:sticky lg:top-24">
-          <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
-            <div className="p-panel-head">
-              <span className="p-tick">Alone</span>
-              <span className="p-suits text-[0.95rem] text-ink-deep" aria-hidden="true">♠</span>
-            </div>
-            <h2 className="p-display text-[1.4rem] leading-snug mb-3">Play a solo hand</h2>
-            <p className="text-[0.95rem] leading-[1.72] text-ink-soft mb-7">
-              Beat your own time, then put the score on the board. No one waiting, no turns to keep.
-            </p>
-            {!isAuthenticated && (
-              <div className="p-note mb-5">Sign in first — every hand is played under your name.</div>
-            )}
-            <button onClick={handleSinglePlay} className="p-btn p-btn-solid p-btn-block">
-              {isAuthenticated ? "Deal me in" : "Sign in to play"}
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </section>
+          {/* Not every game can be played alone — one of them is a game
+              against someone, and there is nothing here to offer a solo player. */}
+          {selectedGame.supportsSolo && (
+            <section className="p-panel px-6 sm:px-7 pt-6 pb-7">
+              <div className="p-panel-head">
+                <span className="p-tick">Alone</span>
+                <span className="p-suits text-[0.95rem] text-ink-deep" aria-hidden="true">♠</span>
+              </div>
+              <h2 className="p-display text-[1.4rem] leading-snug mb-3">Play a solo hand</h2>
+              <p className="text-[0.95rem] leading-[1.72] text-ink-soft mb-7">
+                Beat your own time, then put the score on the board. No one waiting, no turns to keep.
+              </p>
+              {!isAuthenticated && (
+                <div className="p-note mb-5">Sign in first — every hand is played under your name.</div>
+              )}
+              <button onClick={handleSinglePlay} className="p-btn p-btn-solid p-btn-block">
+                {isAuthenticated ? "Deal me in" : "Sign in to play"}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </section>
+          )}
 
           {selectedGame.supportsMulti && (
             <section className="p-felt rounded-sm px-6 sm:px-8 pt-7 pb-8">
@@ -346,10 +424,22 @@ export default function GameLobby() {
                     </div>
 
                     <p className="text-[0.92rem] leading-[1.7] text-paper/70 mb-5">
-                      A seat is open at your table — {selectedGame.label},{" "}
-                      {difficulty.replace("x", "×")}. We'll keep looking for{" "}
-                      {Math.round(match.timeoutSeconds / 60)} minutes, and you'll go
-                      straight to the table the moment someone sits down.
+                      {match.seated > 1 ? (
+                        <>
+                          {match.seated} of {seats} seated at your table —{" "}
+                          {selectedGame.label}, {difficulty.replace("x", "×")}. Holding it
+                          open for the {seats - match.seated === 1 ? "last" : "rest"}; the
+                          hand is dealt the moment every seat is taken.
+                        </>
+                      ) : (
+                        <>
+                          {seats === 2 ? "A seat is" : `${seats - 1} seats are`} open at your
+                          table — {selectedGame.label}, {difficulty.replace("x", "×")}. We'll
+                          keep looking for {Math.round(match.timeoutSeconds / 60)} minutes,
+                          and you'll go straight to the table once{" "}
+                          {seats === 2 ? "someone sits down" : "it fills"}.
+                        </>
+                      )}
                     </p>
 
                     <button

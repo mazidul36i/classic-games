@@ -54,21 +54,54 @@ export interface Room {
   round: number;
   nextRound?: NextRoundProposal | null;
   players: Record<string, RoomPlayer>;
-  gameState?: MultiplayerGameState;
+  gameState?: RoomGameState;
   chat?: Record<string, ChatMessage>;
   createdAt: number;
   startedAt?: number;
   finishedAt?: number;
 }
 
-export interface MultiplayerGameState {
-  cards: CardItem[];
+/** What every game at a table has in common: whose go it is, and since when.
+ *  The rest of `gameState` is whatever the game being played needs. */
+export interface BoardState {
   currentTurn: string; // uid
+  turnStartedAt: number;
+}
+
+export interface MultiplayerGameState extends BoardState {
+  cards: CardItem[];
   flippedCards: string[]; // card ids currently flipped this turn
   matchedPairs: number;
   totalPairs: number;
-  turnStartedAt: number;
 }
+
+/**
+ * Dots and Boxes. `gridSize` is boxes per side (a 4×4 board is 5×5 dots), and
+ * doubles as the marker that tells the two board shapes apart.
+ *
+ * Both maps are absent until something is in them — the database cannot store
+ * an empty object, so a freshly dealt board is `gridSize` and the turn alone.
+ * A claimed edge records who drew it, and a closed box who closed it, which is
+ * what makes a player's score a fact about the board rather than something a
+ * client has to remember. See `utils/dotsUtils`.
+ */
+export interface DotsGameState extends BoardState {
+  gridSize: number;
+  edges?: Record<string, string>; // edgeId -> uid
+  boxes?: Record<string, string>; // boxId  -> uid
+}
+
+/** The two boards share nothing but `BoardState`, so anything reaching past
+ *  that has to say which one it is holding: `isCardBoard` in `utils/flipUtils`,
+ *  `isDotsBoard` in `utils/dotsUtils`. */
+export type RoomGameState = MultiplayerGameState | DotsGameState;
+
+/** A board as it is dealt — everything but the clock, which the server stamps
+ *  on the way in. `cardBoard` in `utils/flipUtils` and `emptyDotsBoard` in
+ *  `utils/dotsUtils` are the two ways to make one. */
+export type NewBoard =
+  | Omit<MultiplayerGameState, 'turnStartedAt' | 'flippedCards'>
+  | Omit<DotsGameState, 'turnStartedAt'>;
 
 export interface MultiplayerResult {
   roomId: string;

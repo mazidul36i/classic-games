@@ -9,10 +9,18 @@ import { useRoomSounds } from "../hooks/useRoomSounds";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { play } from "../audio/cues";
 import { startGame, cleanupRoom, seatedOrder } from "../firebase/realtime";
-import { isPresent } from "../utils/flipUtils";
-import { generateCards } from "../utils/cardUtils";
-import { generateWordCards } from "../utils/wordUtils";
+import { isCardBoard, isPresent } from "../utils/flipUtils";
+import {
+  boxCounts,
+  isDotsBoard,
+  seatInkAt,
+  seatIndexOf,
+  seatSuitAt,
+  totalBoxes,
+} from "../utils/dotsUtils";
+import { dealBoard } from "../utils/dealUtils";
 import Card from "../components/game/Card";
+import DotsBoard from "../components/game/DotsBoard";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import RoomChat from "../components/multiplayer/RoomChat";
 import type { RoomPlayer } from "../types/multiplayer.types";
@@ -23,12 +31,18 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const GAME_CARD: Record<string, { rank: string; suit: string; red: boolean; label: string }> = {
   "card-flip": { rank: "A", suit: "♠", red: false, label: "Card Flip Match" },
   "word-match": { rank: "J", suit: "♥", red: true, label: "Word Match" },
+  "dots-and-boxes": { rank: "10", suit: "♦", red: true, label: "Dots and Boxes" },
 };
 
 const NEXT_GAME_OPTIONS: { id: GameType; label: string }[] = [
   { id: "card-flip", label: "Card Flip" },
   { id: "word-match", label: "Word Match" },
+  { id: "dots-and-boxes", label: "Dots & Boxes" },
 ];
+
+/** Only the card games are dealt from a deck. */
+const usesDeck = (gameType: GameType) =>
+  gameType === "card-flip" || gameType === "word-match";
 const NEXT_DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
 const NEXT_THEMES: CardTheme[] = ["colors", "emojis", "numbers", "animals", "symbols"];
 
@@ -49,6 +63,7 @@ export default function MultiplayerRoom() {
     players,
     secondsLeft,
     handleFlipCard,
+    handleClaimEdge,
     handleReady,
     handleLeave,
     handleProposeNextRound,
@@ -94,12 +109,13 @@ export default function MultiplayerRoom() {
 
   const handleStart = async () => {
     if (!room || !roomId) return;
-    const cards =
-      room.gameType === "word-match"
-        ? generateWordCards(room.difficulty)
-        : generateCards(room.difficulty, room.theme);
-    const firstPlayer = seatedOrder(room.players)[0];
-    await startGame(roomId, cards, firstPlayer, room);
+    const board = dealBoard(
+      room.gameType,
+      room.difficulty,
+      room.theme,
+      seatedOrder(room.players)[0]
+    );
+    await startGame(roomId, board, room);
   };
 
   const handleLeaveRoom = async () => {
@@ -144,10 +160,46 @@ export default function MultiplayerRoom() {
   }
 
   const isHost = room.hostId === user?.uid;
-  const allReady = players.length >= 2 && players.every((p) => p.isReady);
-  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
   const maxPlayers = room.maxPlayers ?? 4;
-  const winner = roundOver ? sortedPlayers[0] : null;
+  /* A room in play refuses new seats, so at a table whose size the host actually
+     chose, dealing early would lock out the people it was opened for. Games
+     without that control keep the old rule: any two who are ready may start. */
+  const isDotsRoom = room.gameType === "dots-and-boxes";
+  const seatsNeeded = isDotsRoom ? maxPlayers : 2;
+  const allReady = players.length >= seatsNeeded && players.every((p) => p.isReady);
+
+  /* Two games, two scoreboards. A deck pays a point a pair and the seat carries
+     it; a dots board records every box against whoever closed it and the seats
+     stay at zero, so the standing is read back off the board.
+
+     What the table is *playing* and what is *on* it are separate questions:
+     before the deal there is no board yet, and a seat at a dots table still
+     counts in boxes rather than the points it is never going to score. */
+  const dots = isDotsBoard(room.gameState) ? room.gameState : null;
+  const boxesPer = boxCounts(dots);
+  /* Whose suit is whose, decided by the order people sat down — the same
+     reading `DotsBoard` uses, so a plate and a box cannot disagree. */
+  const seated = seatedOrder(room.players);
+  const markOf = (p: RoomPlayer) => (isDotsRoom ? seatIndexOf(seated, p.uid) : null);
+  const suitPip = (p: RoomPlayer) => {
+    const at = markOf(p);
+    if (at === null) return null;
+    return (
+      <span className={`p-ink-mark ${seatInkAt(at)} ml-1.5`} aria-hidden="true">
+        {seatSuitAt(at)}
+      </span>
+    );
+  };
+  const scoreOf = (p: RoomPlayer) => (isDotsRoom ? boxesPer[p.uid] ?? 0 : p.score);
+  const boxTally = (p: RoomPlayer) => `${scoreOf(p)} box${scoreOf(p) === 1 ? "" : "es"}`;
+  const sortedPlayers = [...players].sort((a, b) => scoreOf(b) - scoreOf(a));
+  /* A level dots board belongs to nobody — the same reading `useMultiplayer`
+     credits the round by, so the panel cannot name a winner it did not credit. */
+  const levelBoard =
+    isDotsRoom &&
+    sortedPlayers.length > 1 &&
+    scoreOf(sortedPlayers[0]) === scoreOf(sortedPlayers[1]);
+  const winner = roundOver && !levelBoard ? sortedPlayers[0] : null;
   const game = GAME_CARD[room.gameType] ?? { rank: "?", suit: "✦", red: false, label: room.gameType };
 
   const proposal = room.nextRound;
@@ -257,7 +309,8 @@ export default function MultiplayerRoom() {
             </span>
             <p className="p-engrave text-[1.1rem] text-ink-deep">{game.label}</p>
             <p className="p-tick text-ink-soft mt-1.5">
-              Round {room.round} · {room.difficulty.replace("x", "×")} · {room.theme} deck
+              Round {room.round} · {room.difficulty.replace("x", "×")}
+              {usesDeck(room.gameType) ? ` · ${room.theme} deck` : " board"}
             </p>
           </div>
         </div>
@@ -282,10 +335,11 @@ export default function MultiplayerRoom() {
               <div className="overflow-hidden flex-1">
                 <p className="p-engrave text-[1rem] text-ink-deep truncate">
                   {p.displayName}
+                  {suitPip(p)}
                   {p.uid === room.hostId && <span className="text-brass ml-1.5">✦</span>}
                 </p>
                 <p className="p-tick text-ink-soft mt-0.5">
-                  {p.score} pts
+                  {isDotsRoom ? boxTally(p) : `${p.score} pts`}
                   {room.round > 1 && ` · ${p.roundsWon} rounds`}
                   {room.status === "waiting" && (
                     <span className={p.isReady ? "text-felt" : "text-ink-soft"}>
@@ -313,13 +367,17 @@ export default function MultiplayerRoom() {
       {room.status === "waiting" && (
         <div className="p-panel mt-8 px-6 sm:px-8 py-8 text-center">
           <p className="text-[0.98rem] leading-[1.7] text-ink-soft max-w-[46ch] mx-auto mb-7">
-            {players.length < 2
+            {players.length < seatsNeeded
               ? room.isPrivate
-                ? "Send the code above to whoever you want across the table — the game starts once two of you are seated."
+                ? `Send the code above to whoever you want at the table — the game starts once ${
+                    seatsNeeded === 2 ? "two" : seatsNeeded === 3 ? "three" : "four"
+                  } of you are seated. ${players.length} so far.`
                 : "Your opponent has stepped away from the table. Wait a moment, or head back and look for another."
               : allReady
                 ? "Everyone is ready. The host may deal."
-                : "Every player marks themselves ready before the first card turns."}
+                : room.gameType === "dots-and-boxes"
+                  ? "Every player marks themselves ready before the first line is drawn."
+                  : "Every player marks themselves ready before the first card turns."}
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <button
@@ -352,7 +410,11 @@ export default function MultiplayerRoom() {
                 className={`p-status ${isMyTurn ? "p-status-turn" : "p-status-live"}`}
                 aria-live="polite"
               >
-                {isMyTurn ? "Your turn — take a card" : `${turnHolder ?? "…"} is thinking`}
+                {isMyTurn
+                  ? dots
+                    ? "Your turn — draw a line"
+                    : "Your turn — take a card"
+                  : `${turnHolder ?? "…"} is thinking`}
               </span>
               {/* The house does not wait forever: when this runs out, anyone at
                   the table may move the turn on. */}
@@ -368,37 +430,52 @@ export default function MultiplayerRoom() {
               )}
             </div>
 
-            <div
-              className={`grid w-fit mx-auto gap-2 sm:gap-3 place-items-center ${
-                room.difficulty === "4x4"
-                  ? "grid-cols-4"
-                  : room.difficulty === "6x6"
-                    ? "grid-cols-6"
-                    : "grid-cols-8"
-              }`}
-              style={boardStyle}
-            >
-              {room.gameState.cards.map((card) => {
-                const isFlipped = room.gameState?.flippedCards?.includes(card.id) ?? false;
-                const renderCard = isFlipped ? { ...card, isFlipped: true } : card;
-                return (
-                  <Card
-                    key={card.id}
-                    card={renderCard}
-                    onClick={handleFlipCard}
-                    size={cardSize}
-                    disabled={!isMyTurn}
-                  />
-                );
-              })}
-            </div>
+            {dots ? (
+              <DotsBoard
+                gridSize={dots.gridSize}
+                edges={dots.edges ?? {}}
+                boxes={dots.boxes ?? {}}
+                seats={seatedOrder(room.players).map((uid) => room.players[uid])}
+                onClaim={handleClaimEdge}
+                disabled={!isMyTurn}
+              />
+            ) : (
+              isCardBoard(room.gameState) && (
+                <div
+                  className={`grid w-fit mx-auto gap-2 sm:gap-3 place-items-center ${
+                    room.difficulty === "4x4"
+                      ? "grid-cols-4"
+                      : room.difficulty === "6x6"
+                        ? "grid-cols-6"
+                        : "grid-cols-8"
+                  }`}
+                  style={boardStyle}
+                >
+                  {room.gameState.cards.map((card) => {
+                    const flipped = isCardBoard(room.gameState)
+                      ? room.gameState.flippedCards?.includes(card.id) ?? false
+                      : false;
+                    const renderCard = flipped ? { ...card, isFlipped: true } : card;
+                    return (
+                      <Card
+                        key={card.id}
+                        card={renderCard}
+                        onClick={handleFlipCard}
+                        size={cardSize}
+                        disabled={!isMyTurn}
+                      />
+                    );
+                  })}
+                </div>
+              )
+            )}
           </div>
         </motion.div>
       )}
 
       {/* ── Between rounds: the table stays seated ── */}
       <AnimatePresence>
-        {roundOver && winner && (
+        {roundOver && (
           <motion.div
             className="p-panel mt-8 px-6 sm:px-8 py-8"
             initial={{ opacity: 0, y: 18 }}
@@ -409,7 +486,11 @@ export default function MultiplayerRoom() {
             <div className="text-center">
               <span className="p-tick text-vermilion">Round {room.round}</span>
               <h2 className="p-display text-[1.7rem] leading-[1.15] mt-3 mb-6">
-                {winner.uid === user?.uid ? "You took that round." : `${winner.displayName} took that round.`}
+                {!winner
+                  ? "Level — nobody takes that round."
+                  : winner.uid === user?.uid
+                    ? "You took that round."
+                    : `${winner.displayName} took that round.`}
               </h2>
             </div>
 
@@ -417,11 +498,16 @@ export default function MultiplayerRoom() {
               {sortedPlayers.map((p, i) => (
                 <li key={p.uid} className="flex items-center justify-between gap-4 py-3 p-rule">
                   <span className="flex items-center gap-3">
-                    <span className={`p-rank ${i === 0 ? "p-rank-top" : ""}`}>{i + 1}</span>
-                    <span className="p-engrave text-[1.05rem] text-ink-deep">{p.displayName}</span>
+                    <span className={`p-rank ${i === 0 && winner ? "p-rank-top" : ""}`}>{i + 1}</span>
+                    <span className="p-engrave text-[1.05rem] text-ink-deep">
+                      {p.displayName}
+                      {suitPip(p)}
+                    </span>
                   </span>
                   <span className="p-tick text-ink-soft">
-                    {p.score} pts this round
+                    {dots
+                      ? `${boxTally(p)} of ${totalBoxes(dots.gridSize)}`
+                      : `${p.score} pts this round`}
                     <span className="p-figure text-[1.1rem] text-ink-deep ml-3">{p.roundsWon} won</span>
                   </span>
                 </li>
@@ -457,18 +543,20 @@ export default function MultiplayerRoom() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap gap-2.5 mb-7">
-                {NEXT_THEMES.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => proposeNext(nextGameType, nextDifficulty, t)}
-                    aria-pressed={nextTheme === t}
-                    className={`p-opt ${nextTheme === t ? "p-opt-on" : ""}`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+              {usesDeck(nextGameType) && (
+                <div className="flex flex-wrap gap-2.5 mb-7">
+                  {NEXT_THEMES.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => proposeNext(nextGameType, nextDifficulty, t)}
+                      aria-pressed={nextTheme === t}
+                      className={`p-opt ${nextTheme === t ? "p-opt-on" : ""}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <p className="text-[0.92rem] text-ink-soft text-center mb-5">
                 {readyCount >= here.length && here.length >= 2

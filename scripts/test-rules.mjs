@@ -100,7 +100,8 @@ const cards = Array.from({ length: 16 }, (_, i) => ({
 
 const R = 'ROOMAA';
 const PUB = 'ROOMBB';
-const BUCKET = 'card-flip_4x4_emojis';
+// gameType_difficulty_theme_seats — see `bucketKey` in src/firebase/realtime.ts.
+const BUCKET = 'card-flip_4x4_emojis_2';
 
 const run = async () => {
   await Promise.all([signUp('alice'), signUp('mallory'), signUp('carol')]);
@@ -234,6 +235,65 @@ const run = async () => {
   });
   await check('mallory zeroes her own carried-over score', 'allow', 'PUT', `rooms/${R2}/players/${M}/score`, 'mallory', 0);
   await check('alice cannot zero mallory’s score for her', 'deny', 'PUT', `rooms/${R2}/players/${M}/score`, 'alice', 0);
+
+  console.log('\ndots and boxes');
+  const D = 'ROOMDD';
+  const dotsRoom = { ...room(A, true), gameType: 'dots-and-boxes' };
+  await check('a dots and boxes room may be opened', 'allow', 'PUT', `rooms/${D}`, 'alice', dotsRoom);
+  await req('PATCH', `rooms/${D}/players/${M}`, 'ADMIN', seat(M, 'Mallory'));
+
+  await check('a board with no shape at all is refused', 'deny', 'PATCH', `rooms/${D}`, 'alice', {
+    status: 'playing', startedAt: SV,
+    gameState: { currentTurn: A, turnStartedAt: SV },
+  });
+  await check('a board with no clock is refused', 'deny', 'PATCH', `rooms/${D}`, 'alice', {
+    status: 'playing', startedAt: SV,
+    gameState: { gridSize: 4, currentTurn: A },
+  });
+  await check('a board larger than the house allows is refused', 'deny', 'PATCH', `rooms/${D}`, 'alice', {
+    status: 'playing', startedAt: SV,
+    gameState: { gridSize: 20, currentTurn: A, turnStartedAt: SV },
+  });
+  await check('the host deals the board', 'allow', 'PATCH', `rooms/${D}`, 'alice', {
+    status: 'playing', startedAt: SV,
+    gameState: { gridSize: 4, currentTurn: A, turnStartedAt: SV },
+  });
+
+  await check('the turn holder draws a line', 'allow', 'PUT', `rooms/${D}/gameState/edges/h_0_0`, 'alice', A);
+  await check('a line already drawn cannot be drawn again', 'deny', 'PUT', `rooms/${D}/gameState/edges/h_0_0`, 'alice', A);
+  await check('nor claimed from under the player who drew it', 'deny', 'PUT', `rooms/${D}/gameState/edges/h_0_0`, 'mallory', M);
+  await check('a line cannot be signed with someone else’s name', 'deny', 'PUT', `rooms/${D}/gameState/edges/v_0_0`, 'alice', M);
+  await check('an idle player cannot draw', 'deny', 'PUT', `rooms/${D}/gameState/edges/v_0_0`, 'mallory', M);
+  await check('an outsider cannot draw', 'deny', 'PUT', `rooms/${D}/gameState/edges/v_0_0`, 'carol', C);
+  await check('a box cannot be claimed for someone else', 'deny', 'PUT', `rooms/${D}/gameState/boxes/b_0_0`, 'alice', M);
+  await check('the turn holder claims the box they closed', 'allow', 'PUT', `rooms/${D}/gameState/boxes/b_0_0`, 'alice', A);
+  await check('a box cannot be taken off someone once closed', 'deny', 'PUT', `rooms/${D}/gameState/boxes/b_0_0`, 'mallory', M);
+  await check('the board will not carry an unknown field', 'deny', 'PUT', `rooms/${D}/gameState/wildcards`, 'alice', 3);
+
+  // The whole move, as the client actually writes it — the line, the box it
+  // closed, the turn, and the end of the round, in one update.
+  // A move that closes a box keeps the turn, which is why the player who closes
+  // the last one is also the seat the rules then trust to deal the next round.
+  await check('a line, its box and the turn land together', 'allow', 'PATCH', `rooms/${D}`, 'alice', {
+    'gameState/edges/h_1_0': A,
+    'gameState/boxes/b_0_1': A,
+    'gameState/currentTurn': A,
+    'gameState/turnStartedAt': SV,
+    status: 'round-finished',
+    finishedAt: SV,
+  });
+  await check('the seat that closed the board opens the next round', 'allow', 'PATCH', `rooms/${D}`, 'alice', { status: 'playing', startedAt: SV });
+  await check('a seat that did not cannot deal it', 'deny', 'PATCH', `rooms/${D}`, 'mallory', {
+    round: 2,
+    gameState: { gridSize: 6, currentTurn: M, turnStartedAt: SV },
+  });
+  await check('...but the seat that did, does', 'allow', 'PATCH', `rooms/${D}`, 'alice', {
+    round: 2,
+    gameState: { gridSize: 6, currentTurn: M, turnStartedAt: SV },
+  });
+  // If the deal had left last round's lines lying on the board this would be
+  // refused as a line already drawn — which is the whole point of asking.
+  await check('a fresh board has none of last round’s lines on it', 'allow', 'PUT', `rooms/${D}/gameState/edges/h_0_0`, 'mallory', M);
 
   console.log('\nending between rounds');
   const R3 = 'ROOMEE';

@@ -19,12 +19,14 @@ import { rtdb } from './config';
 import type {
   Room,
   RoomPlayer,
+  NewBoard,
   NextRoundProposal,
   ChatMessage,
 } from '../types/multiplayer.types';
-import type { CardItem, GameType, Difficulty, CardTheme } from '../types/game.types';
+import type { GameType, Difficulty, CardTheme } from '../types/game.types';
 import { pickOpponentRooms } from '../utils/matchUtils';
 import { nextPlayerUid, seatedOrder, type PairOutcome } from '../utils/flipUtils';
+import type { EdgeOutcome } from '../utils/dotsUtils';
 
 // Seating and turn order are decided without touching the database, so they live
 // with the rest of the turn logic in `utils/flipUtils`. Re-exported here because
@@ -72,16 +74,30 @@ export const generateRoomCode = (): string => {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 
-/** The matchmaking index: open public rooms, bucketed by what they are playing.
- *  Quick match reads one bucket instead of the whole `rooms` tree. */
-const bucketKey = (gameType: GameType, difficulty: Difficulty, theme: CardTheme) =>
-  `${gameType}_${difficulty}_${theme}`;
+/**
+ * The matchmaking index: open public rooms, bucketed by what they are playing.
+ * Quick match reads one bucket instead of the whole `rooms` tree.
+ *
+ * The table's size is part of the key because a search now waits for the table
+ * to *fill* rather than for one opponent — so someone who asked for four must
+ * not be seated at a table that will close at two, and vice versa. Games with
+ * no size control are all `_2`, which is what they have always been.
+ */
+const bucketKey = (
+  gameType: GameType,
+  difficulty: Difficulty,
+  theme: CardTheme,
+  seats: number
+) => `${gameType}_${difficulty}_${theme}_${seats}`;
 
 const openRoomRef = (bucket: string, roomId: string) =>
   ref(rtdb, `openRooms/${bucket}/${roomId}`);
 
-const roomBucket = (room: Pick<Room, 'gameType' | 'difficulty' | 'theme'>) =>
-  bucketKey(room.gameType, room.difficulty, room.theme);
+/** Everything that decides which bucket a table belongs in. */
+export type TableKey = Pick<Room, 'gameType' | 'difficulty' | 'theme'> & { seats: number };
+
+const roomBucket = (room: Pick<Room, 'gameType' | 'difficulty' | 'theme' | 'maxPlayers'>) =>
+  bucketKey(room.gameType, room.difficulty, room.theme, room.maxPlayers ?? 2);
 
 /**
  * Standing instructions for a seat whose tab goes away.
@@ -122,10 +138,11 @@ export const createRoom = async (
   }
 ): Promise<string> => {
   const isPrivate = options?.isPrivate ?? true;
+  const maxPlayers = options?.maxPlayers ?? 4;
   const room = {
     hostId: hostPlayer.uid,
     isPrivate,
-    maxPlayers: options?.maxPlayers ?? 4,
+    maxPlayers,
     status: 'waiting',
     gameType,
     difficulty,
@@ -151,7 +168,7 @@ export const createRoom = async (
   await set(ref(rtdb, `rooms/${roomId}`), room);
   await armSeatDisconnect(roomId, hostPlayer.uid, false); // still waiting
   if (!isPrivate) {
-    await set(openRoomRef(bucketKey(gameType, difficulty, theme), roomId), true);
+    await set(openRoomRef(bucketKey(gameType, difficulty, theme, maxPlayers), roomId), true);
   }
   return roomId;
 };
@@ -210,23 +227,20 @@ export const joinRoom = async (roomId: string, player: RoomPlayer): Promise<Join
 };
 
 /** Open a table nobody has to know a code to find. */
-export const openQuickMatchRoom = (
-  player: RoomPlayer,
-  gameType: GameType,
-  difficulty: Difficulty,
-  theme: CardTheme
-): Promise<string> =>
-  createRoom(player, gameType, difficulty, theme, { isPrivate: false, maxPlayers: 2 });
+export const openQuickMatchRoom = (player: RoomPlayer, table: TableKey): Promise<string> =>
+  createRoom(player, table.gameType, table.difficulty, table.theme, {
+    isPrivate: false,
+    maxPlayers: table.seats,
+  });
 
 /** Put our table back in the index. A sweep retracts any pointer it could not
  *  sit down at, and it can be wrong about that (a room it read as full may have
  *  emptied a moment later), so a table still waiting re-asserts its own. */
-export const publishOpenRoom = (
-  roomId: string,
-  gameType: GameType,
-  difficulty: Difficulty,
-  theme: CardTheme
-) => set(openRoomRef(bucketKey(gameType, difficulty, theme), roomId), true);
+export const publishOpenRoom = (roomId: string, table: TableKey) =>
+  set(
+    openRoomRef(bucketKey(table.gameType, table.difficulty, table.theme, table.seats), roomId),
+    true
+  );
 
 /**
  * One pass over the matchmaking index: sit down at the first open table we can,
@@ -238,12 +252,10 @@ export const publishOpenRoom = (
  */
 export const sweepForOpponent = async (
   player: RoomPlayer,
-  gameType: GameType,
-  difficulty: Difficulty,
-  theme: CardTheme,
+  table: TableKey,
   ownRoomId: string | null
 ): Promise<string | null> => {
-  const bucket = bucketKey(gameType, difficulty, theme);
+  const bucket = bucketKey(table.gameType, table.difficulty, table.theme, table.seats);
   const snap = await get(
     query(ref(rtdb, `openRooms/${bucket}`), limitToFirst(QUICK_MATCH_CANDIDATES))
   );
@@ -271,39 +283,31 @@ export const sweepForOpponent = async (
  * finds a pointer to a table nobody is sitting at and waits out its two minutes
  * for a player who left.
  */
-export const armSearchDisconnect = async (
-  roomId: string,
-  gameType: GameType,
-  difficulty: Difficulty,
-  theme: CardTheme
-) => {
+export const armSearchDisconnect = async (roomId: string, table: TableKey) => {
+  const pointer = openRoomRef(
+    bucketKey(table.gameType, table.difficulty, table.theme, table.seats),
+    roomId
+  );
   await onDisconnect(ref(rtdb, `rooms/${roomId}`)).remove();
-  await onDisconnect(openRoomRef(bucketKey(gameType, difficulty, theme), roomId)).remove();
+  await onDisconnect(pointer).remove();
 };
 
 /** Drop the standing instructions armed above. Used on the way to taking the
  *  room down by hand, where re-arming the host's seat would be pointless. */
-export const cancelSearchDisconnect = async (
-  roomId: string,
-  gameType: GameType,
-  difficulty: Difficulty,
-  theme: CardTheme
-) => {
+export const cancelSearchDisconnect = async (roomId: string, table: TableKey) => {
+  const pointer = openRoomRef(
+    bucketKey(table.gameType, table.difficulty, table.theme, table.seats),
+    roomId
+  );
   await onDisconnect(ref(rtdb, `rooms/${roomId}`)).cancel();
-  await onDisconnect(openRoomRef(bucketKey(gameType, difficulty, theme), roomId)).cancel();
+  await onDisconnect(pointer).cancel();
 };
 
 /** Stand the room back up once someone has joined it — it is a real table now.
  *  `cancel()` reaches every onDisconnect at or below the path it is called on,
  *  which includes the host's own seat, so that one has to be re-armed after. */
-export const disarmSearchDisconnect = async (
-  roomId: string,
-  uid: string,
-  gameType: GameType,
-  difficulty: Difficulty,
-  theme: CardTheme
-) => {
-  await cancelSearchDisconnect(roomId, gameType, difficulty, theme);
+export const disarmSearchDisconnect = async (roomId: string, uid: string, table: TableKey) => {
+  await cancelSearchDisconnect(roomId, table);
   // A search only ever holds a room that is still waiting.
   await armSeatDisconnect(roomId, uid, false);
 };
@@ -362,21 +366,13 @@ export const setPlayerReady = async (roomId: string, uid: string, isReady: boole
 
 export const startGame = async (
   roomId: string,
-  cards: CardItem[],
-  firstPlayerUid: string,
-  room?: Pick<Room, 'gameType' | 'difficulty' | 'theme' | 'isPrivate'> | null
+  board: NewBoard,
+  room?: Pick<Room, 'gameType' | 'difficulty' | 'theme' | 'isPrivate' | 'maxPlayers'> | null
 ) => {
-  const gameState = {
-    cards,
-    currentTurn: firstPlayerUid,
-    matchedPairs: 0,
-    totalPairs: cards.length / 2,
-    turnStartedAt: serverTimestamp(),
-  };
   await update(ref(rtdb, `rooms/${roomId}`), {
     status: 'playing',
     startedAt: serverTimestamp(),
-    gameState,
+    gameState: { ...board, turnStartedAt: serverTimestamp() },
   });
 
   // Dealt — stop offering the seat to quick match.
@@ -447,6 +443,35 @@ export const resolvePair = async (roomId: string, outcome: PairOutcome) => {
   }
   if (outcome.isComplete) {
     // The board is clear, but the table stays seated — see startNextRound.
+    updates[`rooms/${roomId}/status`] = 'round-finished';
+    updates[`rooms/${roomId}/finishedAt`] = serverTimestamp();
+  }
+  await update(ref(rtdb), updates);
+};
+
+/**
+ * Draw a line: the line, whatever boxes it closed, and the turn, in one write.
+ *
+ * One write for the same reason `resolvePair` is one — a box must not be able to
+ * arrive without the line that closed it — and here it buys something more. A
+ * turn in this game has no pause in the middle, so there is no moment where the
+ * board holds a half-finished move that some other tab has to come along and
+ * settle. The move lands whole, or it does not land.
+ *
+ * The score is not in here because it is not stored: a seat's standing is the
+ * boxes on the board with its name on them. One line can close two boxes, and
+ * the `score` rule only ever lets a seat move by one — see `utils/dotsUtils`.
+ */
+export const claimEdge = async (roomId: string, uid: string, outcome: EdgeOutcome) => {
+  const updates: Record<string, unknown> = {
+    [`rooms/${roomId}/gameState/edges/${outcome.edgeId}`]: uid,
+    [`rooms/${roomId}/gameState/currentTurn`]: outcome.nextTurnUid,
+    [`rooms/${roomId}/gameState/turnStartedAt`]: serverTimestamp(),
+  };
+  for (const id of outcome.closedBoxes) {
+    updates[`rooms/${roomId}/gameState/boxes/${id}`] = uid;
+  }
+  if (outcome.isComplete) {
     updates[`rooms/${roomId}/status`] = 'round-finished';
     updates[`rooms/${roomId}/finishedAt`] = serverTimestamp();
   }
@@ -532,16 +557,9 @@ export const startNextRound = async (
   dealerUid: string,
   currentRound: number,
   proposal: Pick<NextRoundProposal, 'gameType' | 'difficulty' | 'theme'>,
-  cards: CardItem[],
-  firstPlayerUid: string
+  board: NewBoard
 ) => {
-  const gameState = {
-    cards,
-    currentTurn: firstPlayerUid,
-    matchedPairs: 0,
-    totalPairs: cards.length / 2,
-    turnStartedAt: serverTimestamp(),
-  };
+  const gameState = { ...board, turnStartedAt: serverTimestamp() };
   // Two writes, not one: gameType/difficulty/theme/round only get to move once
   // status has *already* landed on 'playing' — the rules read that off the
   // stored room, and a value this same write is also busy changing doesn't
@@ -584,7 +602,7 @@ export const passTurn = async (roomId: string, nextTurnUid: string) => {
 
 export const closeRoom = async (
   roomId: string,
-  room?: Pick<Room, 'gameType' | 'difficulty' | 'theme' | 'isPrivate'> | null
+  room?: Pick<Room, 'gameType' | 'difficulty' | 'theme' | 'isPrivate' | 'maxPlayers'> | null
 ) => {
   const meta =
     room ?? ((await get(ref(rtdb, `rooms/${roomId}`))).val() as Omit<Room, 'id'> | null);

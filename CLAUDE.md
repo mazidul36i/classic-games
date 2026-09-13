@@ -6,10 +6,11 @@ code or the README.
 
 ## What this is
 
-**The Memory Parlour** — a React 19 + TypeScript + Vite 7 memory-games SPA on
-Firebase, deployed to https://classicplay.web.app and custom domain https://classicplay.mazidul.com. Four games, solo and turn-based
-multiplayer. Package name is `memory-games`; the repo and hosting site are
-`classic-games` / `classicplay`.
+**The Memory Parlour** — a React 19 + TypeScript + Vite 7 games SPA on
+Firebase, deployed to https://classicplay.web.app and custom domain https://classicplay.mazidul.com. Five games, solo and turn-based
+multiplayer. Four are memory games; Dots and Boxes is multiplayer-only and the
+first that is not about recall. Package name is `memory-games`; the repo and
+hosting site are `classic-games` / `classicplay`.
 
 ## Commands
 
@@ -112,6 +113,53 @@ starts empty.
   carry `flippedBy` — which is why the round reset asks `claimedPairs` rather than
   remembering what the round number used to be. A hook's first snapshot is not
   evidence that anything changed. — `FIX_LOG.md` 2026-09-08
+- **`gameState` holds two shapes now**, a deck and a Dots and Boxes grid, told apart
+  by shape (`isCardBoard` in `flipUtils`, `isDotsBoard` in `dotsUtils`) and never by
+  reading the room's `gameType` — dealing a round writes `gameType` and `gameState`
+  together, and a rule cannot see a sibling's brand-new value. The rules' `gameState`
+  validate accepts either shape for the same reason.
+- **Dots and Boxes keeps no score on the seat.** One line can close two boxes, and the
+  `score` rule only ever allows +1; the `boxes` map already records who closed what, so
+  the count is derived (`boxCounts`). `players/$uid/score` stays 0 in those rooms, and
+  a level board credits nobody, because `roundsWon` is a claim only its own player may
+  make. Anything reading a seat's standing has to ask which game it is — `scoreOf` in
+  `MultiplayerRoom.tsx`.
+- A dots move has no pause in the middle, so unlike a flip there is no half-finished
+  turn to recover: the line, the boxes it closed and the turn go in **one** `update()`,
+  the same shape as `resolvePair`. Do not split it.
+- **Both `edges` and `boxes` are absent until something is in them** — the database
+  cannot store an empty object, so neither is in the rules' required-children list and
+  every reader defaults them. A freshly dealt board is `gridSize` and the turn alone.
+- `difficulty` doubles as the dots board size (`gridSizeFor`): 4×4/6×6/8×8 boxes. That
+  is what lets one room, one matchmaking bucket and one next-round proposal carry
+  either game. Games with no deck are bucketed under a fixed `theme` (`tableTheme` in
+  `GameLobby.tsx`) so two players who never saw the deck picker can still find each
+  other.
+- **Dots and Boxes seats two to four.** A seat's identity is its **suit**, not its
+  initial — four at a table makes initials collide (two players called Alice and Anna
+  would both write "A") — and suit, ink and turn order all come from the same place,
+  `seatedOrder`, so a seat plate and a box on the board cannot disagree. `seatSuitAt` /
+  `seatInkAt` / `seatIndexOf` in `dotsUtils`, `.p-ink-1..4` in `index.css`. The four
+  inks have to read on the dark baize *and* on the parchment seat plates, so all four
+  are mid-tone — a cream or a near-black vanishes on one ground or the other.
+- **A room in play refuses new seats**, so a table whose size the host chose must not be
+  dealt early or it locks out the people it was opened for: `seatsNeeded` in
+  `MultiplayerRoom.tsx` requires a *full* table for dots, while the card games keep the
+  old "any two who are ready" rule. Quick match now waits for the table to fill rather
+  than for one opponent, which is why `bucketKey` carries the seat count
+  (`gameType_difficulty_theme_seats`) — someone who asked for four must not be seated at
+  a table that closes at two.
+- The quick-match teardown **stands up rather than closes the room** (`leaveRoom`, which
+  closes it behind the last player out). A table waiting on its third player already has
+  a second one sitting at it, and closing it would take their game with it. For the same
+  reason the search clock only runs while you are still sitting alone.
+- Driving the app with the Chrome tools: a **hidden** browser window pauses rAF and
+  throttles timers, so framer-motion entry animations never run (panels stay at
+  `opacity: 0`) and coordinate clicks miss. Check `document.visibilityState` before
+  believing a screenshot; drive clicks through `javascript_tool` (`el.click()`) and
+  inject `*{opacity:1!important;transform:none!important}` to see the page. Note also
+  that setting an input's value without dispatching a real `input` event does not reach
+  React — type into it instead.
 
 ## Recording a fix
 

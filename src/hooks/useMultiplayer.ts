@@ -3,6 +3,7 @@ import {
   subscribeToRoom,
   subscribeToServerTimeOffset,
   flipCard,
+  claimEdge,
   resolvePair,
   passTurn,
   nextPlayerUid,
@@ -26,12 +27,13 @@ import {
   resolvePairOutcome,
   activeOrder,
   claimedPairs,
+  isCardBoard,
   REVEAL_MS,
 } from "../utils/flipUtils";
-import { generateCards } from "../utils/cardUtils";
-import { generateWordCards } from "../utils/wordUtils";
+import { claimEdgeOutcome, isDotsBoard, isEdgeClaimAllowed, roundWinner } from "../utils/dotsUtils";
+import { dealBoard } from "../utils/dealUtils";
 import type { Room, RoomPlayer } from "../types/multiplayer.types";
-import type { CardItem, CardTheme, Difficulty, GameType } from "../types/game.types";
+import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 
 /** How long to wait before trying a refused resolve again, and how many times.
  *  A pair nobody clears is a dead board, so this does not give up quietly — but
@@ -39,15 +41,23 @@ import type { CardItem, CardTheme, Difficulty, GameType } from "../types/game.ty
 const RESOLVE_RETRY_MS = 1_500;
 const RESOLVE_ATTEMPTS = 4;
 
-/** Highest score first, ties broken by uid so every client agrees on an order
- *  without needing to compare notes. */
-const rankByScore = (players: Record<string, RoomPlayer>): RoomPlayer[] =>
-  Object.values(players ?? {}).sort(
+/**
+ * Who took the round, or nobody.
+ *
+ * Two games keep two ledgers. A deck pays a point a pair, so the seats carry
+ * the score and the highest one wins, ties broken by uid so every client agrees
+ * on an order without comparing notes. A dots board records each box against
+ * whoever closed it and leaves the seats at zero, so the count is read off the
+ * board — and a level board credits nobody, because `roundsWon` is a claim only
+ * the player it belongs to may make, and on a tie there is no such player.
+ */
+const roundVictor = (room: Room): string | null => {
+  if (isDotsBoard(room.gameState)) return roundWinner(room.players, room.gameState);
+  const ranked = Object.values(room.players ?? {}).sort(
     (a, b) => b.score - a.score || a.uid.localeCompare(b.uid)
   );
-
-const dealCards = (gameType: string, difficulty: Difficulty, theme: CardTheme): CardItem[] =>
-  gameType === "word-match" ? generateWordCards(difficulty) : generateCards(difficulty, theme);
+  return ranked[0]?.uid ?? null;
+};
 
 export const useMultiplayer = (roomId: string | null, currentUid: string | null) => {
   const [room, setRoom] = useState<Room | null>(null);
@@ -196,11 +206,12 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
 
     if (!roomId || !currentUid || !activeRoom) return;
     const gs = activeRoom.gameState;
-    const flipped = gs?.flippedCards ?? [];
+    // A board with no pair to hold face up has nothing to come back and finish.
+    const flipped = isCardBoard(gs) ? gs.flippedCards ?? [] : [];
     const pending =
       activeRoom.status === "playing" &&
-      Boolean(gs) &&
-      gs!.currentTurn === currentUid &&
+      isCardBoard(gs) &&
+      gs.currentTurn === currentUid &&
       flipped.length >= 2;
 
     if (!pending) {
@@ -211,7 +222,7 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
 
     // One countdown per pair. `turnStartedAt` is in the key so a pair that looks
     // identical on a later turn is still treated as new.
-    const key = `${activeRoom.round}:${gs!.turnStartedAt}:${flipped.join("|")}`;
+    const key = `${activeRoom.round}:${gs.turnStartedAt}:${flipped.join("|")}`;
     if (resolveKeyRef.current === key) return;
     resolveKeyRef.current = key;
     clear();
@@ -283,16 +294,15 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
   }, [roomId, currentUid, activeRoom]);
 
   /* The round is over — whoever comes out ahead credits themselves the win.
-     Every client computes the same ranking from the same synced scores, so
-     only the one client sitting in first actually writes anything. */
+     Every client works out the same winner from the same synced room, so only
+     the one client sitting in first actually writes anything. */
   const creditedRoundRef = useRef<number | null>(null);
   useEffect(() => {
     if (!roomId || !currentUid || !activeRoom) return;
     if (activeRoom.status !== "round-finished") return;
     if (creditedRoundRef.current === activeRoom.round) return;
 
-    const ranked = rankByScore(activeRoom.players);
-    if (ranked[0]?.uid !== currentUid) return;
+    if (roundVictor(activeRoom) !== currentUid) return;
 
     creditedRoundRef.current = activeRoom.round;
     const mine = activeRoom.players[currentUid];
@@ -346,9 +356,13 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     if (!allReady) return;
 
     dealtRoundRef.current = activeRoom.round;
-    const cards = dealCards(proposal.gameType, proposal.difficulty, proposal.theme);
-    const firstPlayer = nextPlayerUid(activeRoom.players, currentUid);
-    startNextRound(roomId, currentUid, activeRoom.round, proposal, cards, firstPlayer).catch(() => {
+    const board = dealBoard(
+      proposal.gameType,
+      proposal.difficulty,
+      proposal.theme,
+      nextPlayerUid(activeRoom.players, currentUid)
+    );
+    startNextRound(roomId, currentUid, activeRoom.round, proposal, board).catch(() => {
       dealtRoundRef.current = null;
     });
   }, [roomId, currentUid, activeRoom]);
@@ -376,6 +390,34 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
       /* refused, or the write never left — the card stays face down */
     } finally {
       inFlightRef.current.delete(cardId);
+    }
+  };
+
+  /* One move at a time, whatever it is a move on. A card only had to be held
+     against itself — a second tap on a *different* card is a legal second half
+     of the same turn. A line is not: the turn ends with it, so two lines sent
+     before the first comes back would both be drawn on one go. Until the board
+     comes back saying otherwise, this tab has no move to make. */
+  const moveInFlightRef = useRef(false);
+
+  /** Draw a line. What it closed, and whose go it is next, are decided against
+   *  the room as it stands at the moment of the write — see `claimEdgeOutcome`. */
+  const handleClaimEdge = async (edgeId: string) => {
+    if (!roomId || !activeRoom || !currentUid) return;
+    if (activeRoom.status !== "playing") return;
+    if (moveInFlightRef.current) return;
+    if (!isEdgeClaimAllowed(activeRoom.gameState, currentUid, edgeId).allowed) return;
+
+    const outcome = claimEdgeOutcome(roomRef.current, currentUid, edgeId);
+    if (!outcome) return;
+
+    moveInFlightRef.current = true;
+    try {
+      await claimEdge(roomId, currentUid, outcome);
+    } catch {
+      /* refused, or the write never left — the line stays undrawn */
+    } finally {
+      moveInFlightRef.current = false;
     }
   };
 
@@ -423,6 +465,7 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     secondsLeft,
     turnLimitSeconds: Math.round(TURN_LIMIT_MS / 1000),
     handleFlipCard,
+    handleClaimEdge,
     handleReady,
     handleLeave,
     handleProposeNextRound,

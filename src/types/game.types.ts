@@ -1,4 +1,9 @@
-export type GameType = 'card-flip' | 'number-sequence' | 'pattern-memory' | 'word-match';
+export type GameType =
+  | 'card-flip'
+  | 'number-sequence'
+  | 'pattern-memory'
+  | 'word-match'
+  | 'dots-and-boxes';
 export type GameMode = 'single' | 'multiplayer';
 export type Difficulty = '4x4' | '6x6' | '8x8';
 export type CardTheme = 'colors' | 'emojis' | 'numbers' | 'animals' | 'symbols';

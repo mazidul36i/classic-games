@@ -5,6 +5,7 @@ import {
   Layers,
   Hash,
   Grid3X3,
+  Grid2X2,
   Type as WordIcon,
   Trophy,
   Users,
@@ -15,7 +16,7 @@ import {
 
 /* ─────────────────────────────────────────────────────────
    THE MEMORY PARLOUR
-   A letterpress broadsheet for a house of four diversions.
+   A letterpress broadsheet for a house of five diversions.
    ───────────────────────────────────────────────────────── */
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -76,6 +77,20 @@ const GAMES = [
     tags: ["Solo", "Table for two"],
     icon: WordIcon,
     href: "/lobby/word-match",
+  },
+  {
+    id: "dots-and-boxes",
+    rank: "10",
+    suit: "♦",
+    red: true,
+    no: "No. 05",
+    title: "Dots and Boxes",
+    discipline: "Territory",
+    description:
+      "Draw a line, take a box, go again. Schoolbook margins made into a duel of patience and timing.",
+    tags: ["Table for two"],
+    icon: Grid2X2,
+    href: "/lobby/dots-and-boxes",
   },
 ] as const;
 
@@ -318,9 +333,9 @@ export default function Home() {
 
               <div className="p-rule pt-7 max-w-[34rem]">
                 <p className="p-lede p-dropcap">
-                  Four small games, each built around a single question — how much can you hold?
-                  Play a hand on your own, or open a room and put a friend across the table.
-                  No download, no ceremony. The deck is already shuffled.
+                  Five small games — four about how much you can hold, and one about who
+                  takes the last box. Play a hand on your own, or open a room and put a
+                  friend across the table. No download, no ceremony. The deck is already shuffled.
                 </p>
               </div>
 
@@ -338,7 +353,7 @@ export default function Home() {
               {/* Running heads */}
               <div className="p-rule mt-12 pt-6 grid grid-cols-3 max-w-[34rem]">
                 {[
-                  { n: "IV", l: "Diversions" },
+                  { n: "V", l: "Diversions" },
                   { n: "II", l: "Ways to play" },
                   { n: "∞", l: "Rounds" },
                 ].map((stat, i) => (
