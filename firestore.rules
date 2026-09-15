@@ -49,23 +49,43 @@ service cloud.firestore {
     // ROADMAP.md Phase 5.1).
     match /leaderboard/{gameType}/scores/{entryId} {
 
-      // The four titles the house keeps a board for. Naming them matters now
+      // The five titles the house keeps a board for. Naming them matters now
       // that the bounds below differ by game: without this a forger could
       // invent a collection and pick whichever ceiling suited them.
       function knownGame() {
-        return gameType in ['card-flip', 'word-match', 'number-sequence', 'pattern-memory'];
+        return gameType in
+          ['card-flip', 'word-match', 'number-sequence', 'pattern-memory', 'dots-and-boxes'];
       }
 
       // Card Flip and Word Match are board games: they finish, and a perfect
-      // run scores basePairs * 100 at zero penalty. The other two are level
-      // games — they only end when the player runs out of lives.
+      // run scores basePairs * 100 at zero penalty. Number Sequence and
+      // Pattern Memory are level games — they only end when the player runs
+      // out of lives. Dots and Boxes is scored in boxes closed, one row per
+      // player per round (src/hooks/useMultiplayer.ts), so it needs its own
+      // ceiling rather than either shape.
       function isBoardGame() {
         return gameType in ['card-flip', 'word-match'];
       }
 
+      function isDotsGame() {
+        return gameType == 'dots-and-boxes';
+      }
+
+      // Boxes and lines on a board of that size (src/utils/dotsUtils.ts:
+      // totalBoxes = n*n, totalEdges = 2n(n+1)), for a board game's ceiling
+      // and Dots and Boxes' alike.
+      function totalBoxesFor(difficulty) {
+        return difficulty == '4x4' ? 16 : difficulty == '6x6' ? 36 : 64;
+      }
+
+      function totalEdgesFor(difficulty) {
+        return difficulty == '4x4' ? 40 : difficulty == '6x6' ? 84 : 144;
+      }
+
       // A board game's ceiling is the board's, mirroring `calculateScore`
       // (src/utils/cardUtils.ts) and Word Match's own scoring in
-      // src/pages/WordMatchPage.tsx.
+      // src/pages/WordMatchPage.tsx. Dots and Boxes' ceiling is simply every
+      // box on that board — a player can close at most all of them.
       //
       // A level game has no board and no end. Number Sequence and Pattern
       // Memory both submit '4x4' for want of a difficulty and a score that is
@@ -78,13 +98,16 @@ service cloud.firestore {
       function maxScoreFor(difficulty, moves) {
         return isBoardGame()
           ? (difficulty == '4x4' ? 800 : difficulty == '6x6' ? 1800 : 3200)
-          : 8 * moves * moves;
+          : isDotsGame()
+            ? totalBoxesFor(difficulty)
+            : 8 * moves * moves;
       }
 
-      // `moves` is flips for a board game and the level reached for a level
-      // game. Five hundred levels is not a game anyone has played.
-      function maxMoves() {
-        return isBoardGame() ? 1000 : 500;
+      // `moves` is flips for a board game, lines drawn for Dots and Boxes,
+      // and the level reached for a level game. Five hundred levels is not a
+      // game anyone has played.
+      function maxMoves(difficulty) {
+        return isBoardGame() ? 1000 : isDotsGame() ? totalEdgesFor(difficulty) : 500;
       }
 
       function validEntry() {
@@ -94,7 +117,7 @@ service cloud.firestore {
           && entryId == request.auth.uid + '_' + d.difficulty
           && d.difficulty in ['4x4', '6x6', '8x8']
           && d.displayName is string && d.displayName.size() > 0 && d.displayName.size() <= 40
-          && d.moves is int && d.moves >= 0 && d.moves <= maxMoves()
+          && d.moves is int && d.moves >= 0 && d.moves <= maxMoves(d.difficulty)
           // The floor is zero, not ten. Losing a level game on the first hand
           // is a real result, and refusing it took the game's history row and
           // the player's counters down with it — the write is one transaction.

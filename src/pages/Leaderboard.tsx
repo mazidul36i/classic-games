@@ -11,6 +11,7 @@ const GAMES: { id: GameType; label: string; rank: string; suit: string; red: boo
   { id: "number-sequence", label: "Sequence", rank: "K", suit: "♦", red: true },
   { id: "pattern-memory", label: "Pattern", rank: "Q", suit: "♣", red: false },
   { id: "word-match", label: "Word Match", rank: "J", suit: "♥", red: true },
+  { id: "dots-and-boxes", label: "Dots and Boxes", rank: "10", suit: "♦", red: true },
 ];
 
 const DIFFICULTIES: { id: Difficulty | "all"; label: string }[] = [

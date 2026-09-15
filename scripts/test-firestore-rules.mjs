@@ -202,6 +202,25 @@ const run = async () => {
   await check('an invented game collection is refused', 'deny', () =>
     setDoc(doc(alice, 'leaderboard/solitaire/scores', row), entry({ score: 999999, moves: 400 })));
 
+  // Dots and Boxes scores in boxes closed and lines drawn, not points or
+  // levels — a 4x4 board is 16 boxes and 40 edges (src/utils/dotsUtils.ts).
+  console.log('\nleaderboard — Dots and Boxes');
+  await check('a losing round with no boxes is still recorded', 'allow', () =>
+    setDoc(doc(alice, 'leaderboard/dots-and-boxes/scores', row), entry({ score: 0, moves: 3 })));
+
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(
+      doc(ctx.firestore(), 'leaderboard/dots-and-boxes/scores', row),
+      entry({ score: 0, moves: 3, completedAt: Timestamp.fromMillis(Date.now() - 10_000) })
+    );
+  });
+  await check('closing every box on a 4x4 board is kept', 'allow', () =>
+    setDoc(doc(alice, 'leaderboard/dots-and-boxes/scores', row), entry({ score: 16, moves: 40 })));
+  await check('more boxes than a 4x4 board has is refused', 'deny', () =>
+    setDoc(doc(alice, 'leaderboard/dots-and-boxes/scores', row), entry({ score: 17, moves: 40 })));
+  await check('more lines than a 4x4 board has is refused', 'deny', () =>
+    setDoc(doc(alice, 'leaderboard/dots-and-boxes/scores', row), entry({ score: 16, moves: 41 })));
+
   console.log(`\n${pass} passed, ${fail} failed\n`);
   await testEnv.cleanup();
   process.exit(fail === 0 ? 0 : 1);

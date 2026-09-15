@@ -124,6 +124,11 @@ starts empty.
   a level board credits nobody, because `roundsWon` is a claim only its own player may
   make. Anything reading a seat's standing has to ask which game it is — `scoreOf` in
   `MultiplayerRoom.tsx`.
+- **Dots and Boxes writes its own leaderboard rows**, one per player per round, from
+  `useMultiplayer.ts`'s `round-finished` effects — there is no solo mode to drive
+  `saveGameResult` the way the other four games do. `score` is boxes closed that round
+  and `moves` is lines drawn, not points or a level; `firestore.rules`' `maxScoreFor`/
+  `maxMoves` cap both to that board's box and edge counts. See `FIX_LOG.md` 2026-09-15.
 - A dots move has no pause in the middle, so unlike a flip there is no half-finished
   turn to recover: the line, the boxes it closed and the turn go in **one** `update()`,
   the same shape as `resolvePair`. Do not split it.

@@ -30,8 +30,15 @@ import {
   isCardBoard,
   REVEAL_MS,
 } from "../utils/flipUtils";
-import { claimEdgeOutcome, isDotsBoard, isEdgeClaimAllowed, roundWinner } from "../utils/dotsUtils";
+import {
+  boxCounts,
+  claimEdgeOutcome,
+  isDotsBoard,
+  isEdgeClaimAllowed,
+  roundWinner,
+} from "../utils/dotsUtils";
 import { dealBoard } from "../utils/dealUtils";
+import { saveGameResult } from "../firebase/firestore";
 import type { Room, RoomPlayer } from "../types/multiplayer.types";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
 
@@ -308,6 +315,43 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
     const mine = activeRoom.players[currentUid];
     creditRoundWin(roomId, currentUid, mine?.roundsWon ?? 0).catch(() => {
       creditedRoundRef.current = null; // let a retry happen on the next tick
+    });
+  }, [roomId, currentUid, activeRoom]);
+
+  /* The leaderboard has no server, so nobody can credit anyone else's row —
+     each seat writes its own the moment its round is over. One row per player
+     per board (src/firebase/firestore.ts: `${uid}_${difficulty}`), so a later
+     round only overwrites this one if it closed more boxes; a level round or
+     a loss still lands, same as a solo game's isWin: false never did exist —
+     solo games always record, so this does too. */
+  const savedResultRoundRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!roomId || !currentUid || !activeRoom) return;
+    if (activeRoom.gameType !== "dots-and-boxes") return;
+    if (activeRoom.status !== "round-finished") return;
+    if (savedResultRoundRef.current === activeRoom.round) return;
+
+    const mine = activeRoom.players?.[currentUid];
+    const gs = activeRoom.gameState;
+    if (!mine || !isDotsBoard(gs)) return;
+
+    savedResultRoundRef.current = activeRoom.round;
+    const score = boxCounts(gs)[currentUid] ?? 0;
+    const moves = Object.values(gs.edges ?? {}).filter((uid) => uid === currentUid).length;
+
+    saveGameResult({
+      uid: currentUid,
+      displayName: mine.displayName,
+      gameType: "dots-and-boxes",
+      mode: "multiplayer",
+      difficulty: activeRoom.difficulty,
+      score,
+      moves,
+      timeSeconds: 0,
+      completedAt: Date.now(),
+      isWin: roundWinner(activeRoom.players, gs) === currentUid,
+    }).catch(() => {
+      savedResultRoundRef.current = null; // let a retry happen on the next tick
     });
   }, [roomId, currentUid, activeRoom]);
 

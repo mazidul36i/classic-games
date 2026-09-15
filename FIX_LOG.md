@@ -6,6 +6,44 @@ first entry is in `ROADMAP.md` Phase 0–1.
 
 ---
 
+## 2026-09-15 — Dots and Boxes never appeared on the leaderboard
+
+`useMultiplayer.ts`, `firestore.rules`, `Leaderboard.tsx`, `test-firestore-rules.mjs`
+
+**Issue.** Dots and Boxes had no leaderboard tab, and no game result was ever recorded
+for it.
+
+**RCA.** `saveGameResult` was only ever called from the four *solo* game pages
+(`CardFlipPage.tsx` etc.) on their own completion handler. Multiplayer never called it
+for any game — Dots and Boxes, being multiplayer-only, had no path to the leaderboard
+at all. It also has no per-seat `score` to reuse (`FIX_LOG` above, "the board is the
+scoreboard"), so `GameResult.score` needed a new meaning for this game.
+
+**Fix.** Each seated player now records their own leaderboard row when their round
+ends (`useMultiplayer.ts`'s `round-finished` effects, one more alongside the existing
+`creditRoundWin` one) — `score` is boxes closed that round (`boxCounts`), `moves` is
+lines that player drew, `difficulty` is the board size already carried for the game.
+Recording per-round, not per-match, means a session of several rounds gets several
+leaderboard writes per player; only a personal best stays visible, same as the other
+games. `firestore.rules`' `maxScoreFor`/`maxMoves` got a `dots-and-boxes` case capped at
+that board's box and edge counts (`totalBoxesFor`/`totalEdgesFor`, mirroring
+`dotsUtils.ts`) instead of either existing shape — the board-game ceiling is scaled for
+deck pairs, and the level-game ceiling has no board at all.
+
+**Don't undo.** Each client writes only its own row (`d.uid == request.auth.uid` in the
+rules) — there is no server to credit one player from another's tab. A round that ends
+level, or lost outright, still gets recorded (`isWin: false` is a real result, same as
+the solo games' 0.7 fix).
+
+**Verified.** `npx tsc -b`, `npm run lint`, `npm run test:rules` (97 Firestore-rules
+checks, including new allow/deny cases for a 4×4 board's box and edge ceilings).
+
+**Left open.** No round-duration timer is tracked for Dots and Boxes rounds, so
+`timeSeconds` is always recorded as `0` — the leaderboard doesn't display it for any
+game, so this is not currently visible anywhere.
+
+---
+
 ## 2026-09-08 — Refreshing mid-hand locked a player out of their own room
 
 `a5a0c68` · `realtime.ts`, `useMultiplayer.ts`, `database.rules.json`, `flipUtils.ts`
