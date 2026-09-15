@@ -343,7 +343,7 @@ export default function Home() {
               </div>
 
               <div className="flex flex-wrap items-center gap-x-9 gap-y-5 mt-10">
-                <Link to="/lobby/card-flip" className="p-btn p-btn-solid">
+                <Link to="/lobby" className="p-btn p-btn-solid">
                   Deal me in
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
@@ -354,7 +354,7 @@ export default function Home() {
               </div>
 
               {/* Running heads */}
-              <div className="p-rule mt-12 pt-6 grid grid-cols-3 max-w-[34rem]">
+              <div className="p-rule mt-12 pt-6 grid grid-cols-3 max-w-136">
                 {[
                   { n: "V", l: "Diversions" },
                   { n: "II", l: "Ways to play" },
@@ -502,7 +502,7 @@ export default function Home() {
                   </p>
 
                   <div className="flex flex-wrap items-center gap-x-8 gap-y-5">
-                    <Link to="/lobby/card-flip" className="p-btn p-btn-solid">
+                    <Link to="/lobby" className="p-btn p-btn-solid">
                       Play a hand
                       <ArrowRight className="w-3.5 h-3.5" />
                     </Link>

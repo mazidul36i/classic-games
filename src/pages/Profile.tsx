@@ -182,7 +182,7 @@ export default function Profile() {
             <p className="text-[0.95rem] text-ink-soft mb-8 max-w-[36ch] mx-auto">
               Play one and it will be written here, win or lose.
             </p>
-            <Link to="/lobby/card-flip" className="p-btn p-btn-solid">
+            <Link to="/lobby" className="p-btn p-btn-solid">
               Deal me in
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>

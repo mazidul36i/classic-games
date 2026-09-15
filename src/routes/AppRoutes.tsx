@@ -46,7 +46,7 @@ export default function AppRoutes() {
               </ProtectedRoute>
             }
           />
-          <Route path="/lobby" element={<Navigate to="/lobby/card-flip" replace />} />
+          <Route path="/lobby" element={<Navigate to="/lobby/dots-and-boxes" replace />} />
           <Route path="/lobby/:gameType" element={<GameLobby />} />
           <Route
             path="/play/card-flip"

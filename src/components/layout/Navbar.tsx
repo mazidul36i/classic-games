@@ -4,7 +4,7 @@ import SoundToggle from "./SoundToggle";
 
 const LINKS = [
   { to: "/", label: "Front Page", match: (p: string) => p === "/" },
-  { to: "/lobby/card-flip", label: "The Table", match: (p: string) => p.startsWith("/lobby") || p.startsWith("/play") || p.startsWith("/room") },
+  { to: "/lobby", label: "The Table", match: (p: string) => p.startsWith("/lobby") || p.startsWith("/play") || p.startsWith("/room") },
   { to: "/leaderboard", label: "Standings", match: (p: string) => p.startsWith("/leaderboard") },
 ];
 
@@ -14,7 +14,7 @@ export default function Navbar() {
 
   return (
     <nav className="p-nav">
-      <div className="max-w-[1180px] mx-auto px-4 sm:px-10">
+      <div className="max-w-295 mx-auto px-4 sm:px-10">
         <div className="flex items-center justify-between h-16 gap-4">
           <Link to="/" className="flex items-center gap-3 shrink-0">
             <span className="p-nav-mark">MG</span>

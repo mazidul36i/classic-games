@@ -74,7 +74,7 @@ export default function WinModal({ isOpen, moves, time, score, onPlayAgain }: Wi
                 <RotateCcw className="w-3.5 h-3.5" />
                 Deal another
               </button>
-              <Link to="/lobby/card-flip" className="p-btn p-btn-outline p-btn-block">
+              <Link to="/lobby" className="p-btn p-btn-outline p-btn-block">
                 Back to the table
               </Link>
             </div>
