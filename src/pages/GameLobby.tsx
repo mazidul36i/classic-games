@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Users, KeyRound, X } from "lucide-react";
 import PageHead from "../components/layout/PageHead";
@@ -23,6 +23,9 @@ const GAME_OPTIONS: {
   supportsSolo: boolean;
   supportsMulti: boolean;
   supportDifficulty: boolean;
+  /** Whether the deck picker means anything. Word Match is a card game but
+   *  deals word pairs whatever the theme, so it does not offer one — and, like
+   *  every game without one, queues under a fixed theme (`tableTheme`). */
   usesDeck: boolean;
   /** Whether the host chooses how many seats the table has. Games without it
    *  are duels, and start as soon as two players are ready. */
@@ -32,7 +35,7 @@ const GAME_OPTIONS: {
   { id: "card-flip", label: "Card Flip", rank: "A", suit: "♠", red: false, supportsSolo: true, supportsMulti: true, supportDifficulty: true, usesDeck: true, supportsSeats: false },
   { id: "number-sequence", label: "Sequence", rank: "K", suit: "♦", red: true, supportsSolo: true, supportsMulti: false, supportDifficulty: false, usesDeck: false, supportsSeats: false },
   { id: "pattern-memory", label: "Pattern", rank: "Q", suit: "♣", red: false, supportsSolo: true, supportsMulti: false, supportDifficulty: true, usesDeck: false, supportsSeats: false },
-  { id: "word-match", label: "Word Match", rank: "J", suit: "♥", red: true, supportsSolo: true, supportsMulti: true, supportDifficulty: true, usesDeck: true, supportsSeats: false },
+  { id: "word-match", label: "Word Match", rank: "J", suit: "♥", red: true, supportsSolo: true, supportsMulti: true, supportDifficulty: true, usesDeck: false, supportsSeats: false },
 ];
 
 const DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
@@ -44,6 +47,14 @@ const VALID_GAME_TYPES: GameType[] = [
   "pattern-memory",
   "word-match",
 ];
+
+/* The names the lobby shows, where they differ from the slug — so a link
+   written from what is on screen still lands on the right game. */
+const SLUG_ALIASES: Record<string, GameType> = {
+  sequence: "number-sequence",
+  pattern: "pattern-memory",
+  dots: "dots-and-boxes",
+};
 
 /** Elapsed time, as a table clock reads it. */
 const asClock = (ms: number) => {
@@ -103,6 +114,14 @@ export default function GameLobby() {
     [navigate]
   );
   const match = useQuickMatch(onMatched);
+
+  /* An unknown slug used to fall back to Card Flip silently, leaving the
+     address naming one game and the page showing another. Send it somewhere
+     real instead: its alias if it has one, otherwise the lobby's default. */
+  if (!VALID_GAME_TYPES.includes(rawGameType as GameType)) {
+    const target = SLUG_ALIASES[rawGameType?.toLowerCase() ?? ""] ?? "dots-and-boxes";
+    return <Navigate to={`/lobby/${target}${location.search}`} replace />;
+  }
 
   const selectedGame = GAME_OPTIONS.find((g) => g.id === gameType)!;
   const busy = creating || joining || match.searching;

@@ -94,9 +94,23 @@ starts empty.
 - Dealing the next multiplayer round is **two sequential writes, not one atomic
   multi-path update** — the emulator won't reliably let a field's `validate` see a
   sibling's brand-new value from the same write. See `MULTIPLAYER_ROUNDS.md`.
-- **Open bug:** when a turn hits the 45s limit, `currentTurn` ping-pongs between seats
-  forever and makes the table unplayable (`src/hooks/useMultiplayer.ts` expiry effect).
-  Documented as `ROADMAP.md` 0.9; it is live in production.
+- **The expiry effect must never pass its own turn, and a tab gets at most one pass
+  attempt per turn length** (`performance.now()`). The rules time-gate everyone except
+  the holder, and the SDK's optimistic writes carry an *estimated* server time, so
+  without these guards a tab that misjudges the clock passes nonstop. Reproducing it
+  needs a skewed clock; two honest SDK clients never loop. — `FIX_LOG.md` 2026-09-28
+- **"Already done for this round" must be stored, not kept in a ref.** Refs reset on
+  reload. `wonRound` on the seat guards `roundsWon` (and the rules enforce it), and
+  `localStorage` guards the Dots leaderboard save. — `FIX_LOG.md` 2026-09-28
+- The first write of a next-round deal also restarts `gameState/turnStartedAt`, and the
+  expiry effect ignores a cleared board (`isBoardCleared`). Otherwise the other seats
+  pass the turn away from the dealer between the two writes.
+- **Firestore composite indexes live in `firestore.indexes.json`**, and CI deploys
+  Hosting only, so run `firebase deploy --only firestore:indexes` (and the rules) by hand.
+  A missing index throws `failed-precondition`, which a bare `catch` turns into an empty
+  list. That's how profile history sat empty. — `FIX_LOG.md` 2026-09-28
+- The profile's `password` field is **intentional** (owner's decision). Do not remove
+  it, even though `ROADMAP.md` 0.8 describes it as a bug.
 - **A seat is never deleted once a hand is in play** — it is kept and marked
   `connected: false`, because deleting it on disconnect meant a refresh locked the
   player out of their own room for good. Anything that asks "who is at this table"

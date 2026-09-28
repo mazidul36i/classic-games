@@ -40,9 +40,9 @@ const NEXT_GAME_OPTIONS: { id: GameType; label: string }[] = [
   { id: "word-match", label: "Word Match" },
 ];
 
-/** Only the card games are dealt from a deck. */
-const usesDeck = (gameType: GameType) =>
-  gameType === "card-flip" || gameType === "word-match";
+/** Only Card Flip's deck takes a theme. Word Match deals word pairs whatever
+ *  the theme says, so offering one there would be a choice that does nothing. */
+const usesDeck = (gameType: GameType) => gameType === "card-flip";
 const NEXT_DIFFICULTIES: Difficulty[] = ["4x4", "6x6", "8x8"];
 const NEXT_THEMES: CardTheme[] = ["colors", "emojis", "numbers", "animals", "symbols"];
 
@@ -310,7 +310,11 @@ export default function MultiplayerRoom() {
             <p className="p-engrave text-[1.1rem] text-ink-deep">{game.label}</p>
             <p className="p-tick text-ink-soft mt-1.5">
               Round {room.round} · {room.difficulty.replace("x", "×")}
-              {usesDeck(room.gameType) ? ` · ${room.theme} deck` : " board"}
+              {usesDeck(room.gameType)
+                ? ` · ${room.theme} deck`
+                : room.gameType === "word-match"
+                  ? " · word pairs"
+                  : " board"}
             </p>
           </div>
         </div>

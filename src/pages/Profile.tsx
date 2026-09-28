@@ -45,7 +45,12 @@ export default function Profile() {
     if (!user) return;
     getUserGameHistory(user.uid)
       .then(setHistory)
-      .catch(() => setHistory([]))
+      .catch((err) => {
+        // This once hid a missing composite index for weeks: the query threw
+        // failed-precondition and the page just said "no hands on record".
+        console.error("[profile] game history failed", err);
+        setHistory([]);
+      })
       .finally(() => setLoading(false));
   }, [user]);
 

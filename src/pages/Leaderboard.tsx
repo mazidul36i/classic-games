@@ -34,7 +34,10 @@ export default function Leaderboard() {
       try {
         const diff = selectedDiff === "all" ? undefined : selectedDiff;
         setEntries(await getLeaderboard(selectedGame, diff, 20));
-      } catch {
+      } catch (err) {
+        // A board size filter needs a composite index (firestore.indexes.json);
+        // without it the query throws and the board would just look empty.
+        console.error("[leaderboard] query failed", err);
         setEntries([]);
       } finally {
         setLoading(false);

@@ -6,6 +6,97 @@ first entry is in `ROADMAP.md` Phase 0–1.
 
 ---
 
+## 2026-09-28 — Profile history and filtered leaderboards were empty; lobby slug and deck fixes
+
+`firestore.indexes.json` (new), `firebase.json`, `Profile.tsx`, `Leaderboard.tsx`,
+`GameLobby.tsx`, `MultiplayerRoom.tsx` · from `E2E_TEST_REPORT.md`
+
+**Issue.** The profile showed the right totals, but "Recent hands" said *No hands on
+record*. Unknown `/lobby/<slug>` URLs showed Card Flip. Word Match offered a deck
+picker that had no effect.
+
+**RCA.** Two queries need composite indexes, and the project had none: game history
+(`uid ==` + `orderBy completedAt desc`) and the leaderboard's board-size filter
+(`difficulty ==` + `orderBy score desc`). Firestore throws `failed-precondition`, and
+both pages had a bare `catch` that turned it into an empty list. Confirmed live from
+the console. The totals worked because they read counters on the profile document.
+The leaderboard's "All" view is a single-field sort, which is why the report saw a
+working board. For the lobby, an invalid slug fell back to `card-flip` in
+`GameLobby.tsx`; it was not stale state. Word Match was flagged `usesDeck`, but
+`generateWordCards` takes no theme.
+
+**Fix.** Declared both indexes and wired them into `firebase.json`. Both `catch`es
+now log the error. Unknown slugs redirect: the display names `sequence`, `pattern`
+and `dots` map to their games, anything else goes to the `/lobby` default. Word
+Match drops the deck picker and queues under the fixed theme, so players who picked
+different decks no longer land in separate matchmaking buckets.
+
+**Don't undo.** Any new `where` + `orderBy` on different fields needs an entry in
+`firestore.indexes.json`. The CI workflow deploys Hosting only, so indexes and rules
+go out by hand (`firebase deploy --only firestore:indexes`).
+
+**Verified.** `npx tsc -b`, `npm run lint`. In the browser: the live index errors for
+both queries; `/lobby/sequence?difficulty=6x6` → `/lobby/number-sequence?difficulty=6x6`;
+`/lobby/nonsense` → `/lobby/dots-and-boxes`; Word Match lobby has no deck picker.
+
+**Not a bug.** The report's "lobby blank for 2–5s": nothing in the lobby waits on the
+network, and the panel is a 0.87s framer-motion fade. In the automation window
+`visibilityState` was `hidden` at 0 fps, and the panel stayed at `opacity: 0` for 7s+.
+This is the throttled-window trap already in `CLAUDE.md`.
+
+---
+
+## 2026-09-28 — Turn ping-pong, double round credit, and the slow next-round deal
+
+`useMultiplayer.ts`, `realtime.ts`, `dealUtils.ts`, `multiplayer.types.ts`,
+`database.rules.json`, `test-rules.mjs` · ROADMAP 0.9, 0.12, 0.13
+
+**Issue.** (0.9) Once a turn expired, `currentTurn` flipped between seats nonstop
+and the table became unusable. (0.12) Reloading the round-over screen credited
+the winner another `roundsWon` each time. (0.13) If the table spent more than 45s
+agreeing on the next round, the deal failed with `permission_denied`.
+
+**RCA.** (0.9) The expiry effect ran on the SDK's optimistic local write. A pass
+shows up locally with an *estimated* server timestamp, so a tab that misjudged
+the clock saw the turn it had just passed as already expired and passed it
+again, looping entirely on local events. The rules time-gate every seat except
+the holder, so a holder's premature pass was accepted for real. Two tabs with
+good clocks never loop, which is why a clean repro needs a skewed tab: with a
+50s skew, the SDK harness showed 9,041 turn changes in 20s. (0.12) The only
+guard was `creditedRoundRef`, which starts empty on every mount. The Dots
+leaderboard save (`savedResultRoundRef`) had the same guard and so did the same
+thing to history and profile counters. (0.13) `startNextRound`'s first write set
+`status: playing` on top of the last round's `turnStartedAt`.
+
+**Fix.** (0.9) The expiry effect never passes its own turn, and each tab makes
+at most one pass attempt per `TURN_LIMIT_MS`, timed with `performance.now()`.
+A real expiry can't recur faster than that, so a due pass is never delayed.
+(0.12) Seats carry `wonRound`. The credit writes it together with `roundsWon`,
+and the rules require it to equal the room's `round` and refuse a second credit
+for the same round. The Dots save also records the saved round in
+`localStorage`. (0.13) The first write of the deal also stamps
+`gameState/turnStartedAt`, the expiry effect skips a cleared board
+(`isBoardCleared`), and a dealer whose tab died between the two writes finishes
+the deal on the next tab (`layNextRound`).
+
+**Don't undo.** Don't let a tab pass its own turn on expiry, and don't drop the
+per-tab attempt limit. Neither the rules nor the server clock can stop a
+holder's pass. Don't guard "already done this round" with a ref alone, because
+refs reset on reload. Don't put the room back in play without restarting the
+clock.
+
+**Verified.** `npx tsc -b`, `npm run lint`, `npm run test:rules` (102 RTDB,
+including the new `wonRound` and deal-clock cases, and 39 Firestore, 54 flip,
+39 dots checks). For 0.9, a throwaway harness drove 2–3 real SDK clients
+against the emulator through the expiry logic: the old logic looped (9,041 and
+38,476 turn changes), the new logic made exactly one accepted pass per expiry.
+Not yet driven in two browsers.
+
+**Left open.** The two solo games still send `difficulty: "4x4"` (ROADMAP 0.7
+note). Changing it would move their leaderboard row IDs.
+
+---
+
 ## 2026-09-15 — Dots and Boxes never appeared on the leaderboard
 
 `useMultiplayer.ts`, `firestore.rules`, `Leaderboard.tsx`, `test-firestore-rules.mjs`
