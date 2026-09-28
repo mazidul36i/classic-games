@@ -11,6 +11,11 @@ export interface RoomPlayer {
   photoURL?: string;
   score: number;
   roundsWon: number;
+  /** The last round this seat was credited a win for. `roundsWon` only moves
+   *  alongside it, and never twice for the same round — a reload of the
+   *  round-over screen used to credit the same win again. Absent until the
+   *  seat's first win. */
+  wonRound?: number;
   isReady: boolean;
   joinedAt: number;
   /** Whether the tab holding this seat is currently connected. Once a hand is

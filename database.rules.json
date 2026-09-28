@@ -128,8 +128,20 @@
             // to fabricate their own local game state. It can only ever move by
             // one, and only while the room is between rounds, so the worst a
             // dishonest client can do is award itself a round it didn't win.
+            //
+            // And only once per round: the credit has to stamp `wonRound` with
+            // the room's current round in the same write, and is refused if the
+            // seat already carries that stamp. A reload of the round-over screen
+            // used to credit the same win again (ROADMAP 0.12) because the only
+            // thing remembering it was a ref in one tab.
             "roundsWon": {
-              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (newData.val() === data.val() + 1 && root.child('rooms/' + $roomId + '/status').val() === 'round-finished'))"
+              ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 0) || newData.val() === data.val() || (newData.val() === data.val() + 1 && root.child('rooms/' + $roomId + '/status').val() === 'round-finished' && newData.parent().child('wonRound').val() === root.child('rooms/' + $roomId + '/round').val() && data.parent().child('wonRound').val() !== root.child('rooms/' + $roomId + '/round').val()))"
+            },
+            // The round `roundsWon` was last credited for. It can only ever be
+            // set to the round the room is on, and never changes by itself —
+            // the check that it moves together with `roundsWon` is above.
+            "wonRound": {
+              ".validate": "newData.isNumber() && (newData.val() === data.val() || (newData.val() === root.child('rooms/' + $roomId + '/round').val() && newData.parent().child('roundsWon').val() === data.parent().child('roundsWon').val() + 1))"
             },
             "isReady": { ".validate": "newData.isBoolean()" },
             // Whether the tab holding this seat is connected. Written by the

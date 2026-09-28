@@ -480,14 +480,25 @@ export const claimEdge = async (roomId: string, uid: string, outcome: EdgeOutcom
 
 /**
  * Credit a round to whoever came out ahead. The rules can only confirm this is
- * a player crediting *themselves*, once, while the room is between rounds —
- * working out who actually won is left to the caller (every client computes
- * the same ranking from the same synced scores, so this is only ever called
- * by the one client whose own uid is in front).
+ * a player crediting *themselves*, once per round, while the room is between
+ * rounds — working out who actually won is left to the caller (every client
+ * computes the same ranking from the same synced scores, so this is only ever
+ * called by the one client whose own uid is in front).
+ *
+ * `wonRound` is what makes it once. It used to be an in-memory ref in the hook,
+ * which a reload of the round-over screen set back to nothing, so the same
+ * round was credited again on every refresh. The round a win was credited for
+ * now sits on the seat, and the rules refuse a second credit for it.
  */
-export const creditRoundWin = async (roomId: string, uid: string, currentRoundsWon: number) => {
+export const creditRoundWin = async (
+  roomId: string,
+  uid: string,
+  currentRoundsWon: number,
+  round: number
+) => {
   await update(ref(rtdb, `rooms/${roomId}/players/${uid}`), {
     roundsWon: currentRoundsWon + 1,
+    wonRound: round,
   });
 };
 
@@ -559,16 +570,40 @@ export const startNextRound = async (
   proposal: Pick<NextRoundProposal, 'gameType' | 'difficulty' | 'theme'>,
   board: NewBoard
 ) => {
-  const gameState = { ...board, turnStartedAt: serverTimestamp() };
   // Two writes, not one: gameType/difficulty/theme/round only get to move once
   // status has *already* landed on 'playing' — the rules read that off the
   // stored room, and a value this same write is also busy changing doesn't
   // reliably show up yet to a sibling field's own check. Flip status first,
   // then lay everything else on top of the now-settled 'playing' room.
+  //
+  // The first write restarts the clock as well. Without it the room is back in
+  // play under the *last* round's `turnStartedAt`, so a table that took more
+  // than the turn limit to agree on what to play next found every client's
+  // expiry effect passing the turn the instant status landed — and the second
+  // write, which only the turn holder may make, was refused. The dealer holds
+  // the turn here (it closed out the round), so the clock is theirs to reset.
   await update(ref(rtdb, `rooms/${roomId}`), {
     status: 'playing',
     startedAt: serverTimestamp(),
+    'gameState/turnStartedAt': serverTimestamp(),
   });
+  await layNextRound(roomId, dealerUid, currentRound, proposal, board);
+};
+
+/**
+ * The second half of `startNextRound`: the new board on a room already back in
+ * play. Exported on its own so a dealer who went away between the two writes
+ * can finish the deal from their next tab, rather than leave the table sitting
+ * in play on a board with nothing left to take.
+ */
+export const layNextRound = async (
+  roomId: string,
+  dealerUid: string,
+  currentRound: number,
+  proposal: Pick<NextRoundProposal, 'gameType' | 'difficulty' | 'theme'>,
+  board: NewBoard
+) => {
+  const gameState = { ...board, turnStartedAt: serverTimestamp() };
   await update(ref(rtdb), {
     [`rooms/${roomId}/round`]: currentRound + 1,
     [`rooms/${roomId}/gameType`]: proposal.gameType,

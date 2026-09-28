@@ -121,9 +121,17 @@ The `console.log("game state", gs)` is gone from `useMultiplayer`, and
 `index.html` ships `/favicon.svg` — the vermilion crosshatch card back — instead
 of `vite.svg`.
 
-### 0.7 The leaderboard rules reject the two solo games — **open, and live**
+### 0.7 The leaderboard rules reject the two solo games — **shipped**
 
-This is the sharp edge of 0.2, and it is the most urgent thing in the document.
+Shipped with the Dots and Boxes leaderboard work: `maxScoreFor` in
+`firestore.rules` gives the two level games a level-based ceiling
+(`8 * level²`, with `moves` carrying the level reached), the floor is `>= 0`,
+and `scripts/test-firestore-rules.mjs` pins the runs that used to be refused.
+The side note below — both games still stamp `difficulty: "4x4"` — is still
+true and deliberately left: changing it moves the leaderboard row ID
+(`{uid}_{difficulty}`) and would orphan every solo best already recorded.
+
+The original write-up, for the record:
 
 `NumberSequencePage` and `PatternMemoryPage` both call `saveGameResult` with
 `difficulty: "4x4"` hard-coded and a score that accumulates without bound —
@@ -152,7 +160,11 @@ nothing on screen says so, and the player's game is simply not recorded.
 they are stamping `4x4` to satisfy a field shaped for the card games. Either give
 `GameResult.difficulty` an honest value for them or make the field optional.
 
-### 0.8 The profile stores the account password — **open, and live**
+### 0.8 The profile stores the account password — **won't fix: intentional**
+
+The owner keeps this field on purpose (2026-09-28). Do not remove it from
+`createUserProfile` / `UserProfile` or purge it from existing documents. The
+analysis below stays for the record.
 
 `createUserProfile` (`src/firebase/firestore.ts:32`) writes
 
@@ -178,7 +190,21 @@ nothing on the client would clear its own. Consider tightening the profile read
 rule at the same time: the leaderboard already carries the display name, and
 there is no screen that needs to read a stranger's whole profile document.
 
-### 0.9 The turn ping-pongs once a clock expires — **open, and live**
+### 0.9 The turn ping-pongs once a clock expires — **shipped**
+
+Reproduced against the emulators with real SDK clients: one tab whose clock
+reads 50s fast drove **9,041** turn changes in 20s at two seats and 38,476 in
+a minute at three. The loop runs on the SDK's *optimistic* local write — a pass
+is shown locally stamped with an estimate of server time, so a tab that
+misjudges the clock reads the turn it just handed on as already expired and
+passes that too. And the rules time-gate everyone except the turn holder, so a
+holder's premature pass is accepted. Two honest clients with good clocks do
+not loop, which is why the first repro attempts came back clean.
+
+Fixed in the expiry effect (`useMultiplayer.ts`): a tab never passes its own
+turn on expiry, and passes at most once per turn length on its own monotonic
+clock (`performance.now()`), which a real expiry can never beat. Details in
+`FIX_LOG.md` 2026-09-28. The original write-up:
 
 Found while verifying 3.5's sound, with two accounts at one table. Once a turn
 genuinely runs out the 45s limit, `currentTurn` does not settle on the next
@@ -281,7 +307,13 @@ than a point or comes from the wrong seat.
 
 ---
 
-### 0.12 Refreshing the round-over screen credits another round win — **open, and live**
+### 0.12 Refreshing the round-over screen credits another round win — **shipped**
+
+Done as proposed: the seat carries `wonRound`, the credit writes it with
+`roundsWon`, and the rules refuse a credit without the stamp or a second one
+for the same round. The Dots and Boxes leaderboard save had the same ref-only
+guard (a reload wrote another history row and bumped the profile counters); it
+now also remembers the saved round on the device. The original write-up:
 
 Found while playtesting Dots and Boxes against the emulators, but it is not
 that game's bug — the credit effect is shared, so Card Flip and Word Match do
@@ -300,7 +332,14 @@ pinning it to the room's current `round`) and credit only when it does not
 already match. The scoreboard is then a fact about the room rather than
 something one tab remembers.
 
-### 0.13 A next round dealt more than 45s after the last one fails — **open, and live**
+### 0.13 A next round dealt more than 45s after the last one fails — **shipped**
+
+Both halves of the suggestion: `startNextRound`'s first write stamps
+`gameState/turnStartedAt` alongside `status`, and the expiry effect ignores a
+cleared board (`isBoardCleared` in `dealUtils`). A dealer who goes away between
+the two writes is also recovered now — the room reads as in play on a cleared
+board with `nextRound` still standing, and the dealer's next tab finishes the
+deal (`layNextRound`). The original write-up:
 
 Also found playtesting Dots and Boxes, also not that game's bug. `startNextRound`
 is deliberately two writes (see `MULTIPLAYER_ROUNDS.md`): flip `status` to
@@ -682,14 +721,10 @@ forgot-password flow and table talk have landed since.
 
 The next week, on the free plan:
 
-1. **Day 1 — the live bugs, in this order.** 0.7 first: the leaderboard rule
-   is currently throwing away finished games in two of the four titles, and every
-   day it stays up is data that is gone. Then 0.8 — delete the password field,
-   and purge it from the documents already written. Neither is more than a few
-   hours, and both are the kind of thing that is embarrassing to find later.
-   0.9 is the third, and it wants a day of its own rather than an hour: an
-   expired turn currently leaves the table ping-ponging and writing forever,
-   which makes a room unplayable and quietly eats the write quota.
+1. **Day 1 — the live bugs.** Done: 0.7, 0.9, 0.12 and 0.13 have shipped, and
+   0.8 is intentional. The one thing left from Phase 0 is deploying: the 0.12
+   fix adds a seat field (`wonRound`), so `database.rules.json` must go out
+   before the client that writes it.
 2. **Day 2 — route-level `lazy()` (2.1).** The bundle is the one number that has
    moved the wrong way, and it is the ceiling on how many people can visit at all.
    Fourteen static page imports in one router file is an afternoon's work for

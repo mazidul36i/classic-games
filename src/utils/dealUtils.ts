@@ -1,7 +1,7 @@
 import type { CardTheme, Difficulty, GameType } from '../types/game.types';
-import type { NewBoard } from '../types/multiplayer.types';
-import { cardBoard } from './flipUtils';
-import { emptyDotsBoard, gridSizeFor } from './dotsUtils';
+import type { NewBoard, RoomGameState } from '../types/multiplayer.types';
+import { cardBoard, isCardBoard } from './flipUtils';
+import { emptyDotsBoard, gridSizeFor, isDotsBoard, totalBoxes } from './dotsUtils';
 import { generateCards } from './cardUtils';
 import { generateWordCards } from './wordUtils';
 
@@ -28,3 +28,18 @@ export const dealBoard = (
           : generateCards(difficulty, theme),
         firstPlayerUid
       );
+
+/**
+ * Whether there is nothing left to play on this board — every pair taken, or
+ * every box closed.
+ *
+ * Worth asking because `status` can say 'playing' over a finished board: the
+ * next round is dealt in two writes (see `startNextRound`), and between them
+ * the room is back in play with the last round's board still on it. There is
+ * no turn to take on that board, so there is no turn to run out of either.
+ */
+export const isBoardCleared = (gs: RoomGameState | null | undefined): boolean => {
+  if (isCardBoard(gs)) return gs.totalPairs > 0 && gs.matchedPairs >= gs.totalPairs;
+  if (isDotsBoard(gs)) return Object.keys(gs.boxes ?? {}).length >= totalBoxes(gs.gridSize);
+  return false;
+};

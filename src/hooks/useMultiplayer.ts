@@ -19,6 +19,7 @@ import {
   proposeNextRound,
   setNextRoundReady,
   startNextRound,
+  layNextRound,
   TURN_LIMIT_MS,
   TURN_GRACE_MS,
 } from "../firebase/realtime";
@@ -37,7 +38,7 @@ import {
   isEdgeClaimAllowed,
   roundWinner,
 } from "../utils/dotsUtils";
-import { dealBoard } from "../utils/dealUtils";
+import { dealBoard, isBoardCleared } from "../utils/dealUtils";
 import { saveGameResult } from "../firebase/firestore";
 import type { Room, RoomPlayer } from "../types/multiplayer.types";
 import type { CardTheme, Difficulty, GameType } from "../types/game.types";
@@ -64,6 +65,28 @@ const roundVictor = (room: Room): string | null => {
     (a, b) => b.score - a.score || a.uid.localeCompare(b.uid)
   );
   return ranked[0]?.uid ?? null;
+};
+
+/* Which round's result this device last recorded, per room and player. Storage
+   can be missing or throw (private windows, blocked site data); losing it only
+   costs the reload guard, never the save itself. */
+const savedRoundKey = (roomId: string, uid: string) => `parlour:savedRound:${roomId}:${uid}`;
+
+const savedRoundOnDevice = (roomId: string, uid: string): number | null => {
+  try {
+    const raw = window.localStorage.getItem(savedRoundKey(roomId, uid));
+    return raw === null ? null : Number(raw);
+  } catch {
+    return null;
+  }
+};
+
+const rememberSavedRound = (roomId: string, uid: string, round: number) => {
+  try {
+    window.localStorage.setItem(savedRoundKey(roomId, uid), String(round));
+  } catch {
+    /* nothing to be done — the ref still covers this tab */
+  }
 };
 
 export const useMultiplayer = (roomId: string | null, currentUid: string | null) => {
@@ -117,20 +140,43 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
       ? Math.max(0, Math.ceil((TURN_LIMIT_MS - turnElapsed) / 1000))
       : null;
 
-  /* Nobody is going to come back to a turn that ran out. Anyone still at the
-     table may move it on — the rules permit this write only once the clock has
-     actually expired, so it cannot be used to jump a live turn. Every client
-     tries; the first one wins and the rest are refused, which is fine. */
+  /* Nobody is going to come back to a turn that ran out. Anyone else still at
+     the table may move it on — the rules permit this write only once the clock
+     has actually expired, so it cannot be used to jump a live turn. Every
+     client tries; the first one wins and the rest are refused, which is fine.
+
+     Two guards, both of which the turn ping-pong (ROADMAP 0.9) got through:
+
+     - Never your own turn. The rules time-gate everyone *but* the holder — the
+       holder may always pass, which `leaveRoom` needs — so a holder whose tab
+       misjudged the clock had its instant pass accepted, and the next holder's
+       tab could do the same. Someone else is always there to pass an idle
+       holder's turn; if nobody is, there is nobody to pass it to.
+     - One try per turn length, on this tab's own monotonic clock. A pass is
+       shown locally before the server answers, stamped with an *estimate* of
+       server time, so a tab that misjudges the clock reads the turn it just
+       handed on as already expired and passes that too — refused, and
+       refused, thousands of times a minute, and at a table of three the
+       local chain never lands back on the tab's own seat to stop it. A real
+       expiry cannot come round faster than the limit, so this never holds
+       back a pass that was due. */
+  const lastPassTryRef = useRef(-Infinity);
   useEffect(() => {
     if (!roomId || !currentUid || !isPlaying || !gameState || !activeRoom) return;
     if (!activeRoom.players?.[currentUid]) return;
+    if (gameState.currentTurn === currentUid) return;
+    // A cleared board has no turn to take, so none to run out of — see
+    // `startNextRound`, which puts the room back in play before the new board.
+    if (isBoardCleared(gameState)) return;
     if (turnElapsed <= TURN_LIMIT_MS + TURN_GRACE_MS) return;
     if (passedTurnRef.current === turnStartedAt) return;
+    if (performance.now() - lastPassTryRef.current < TURN_LIMIT_MS) return;
 
     const next = nextPlayerUid(activeRoom.players, gameState.currentTurn);
     if (next === gameState.currentTurn) return; // last player standing keeps it
 
     passedTurnRef.current = turnStartedAt;
+    lastPassTryRef.current = performance.now();
     passTurn(roomId, next).catch(() => {
       /* someone else's pass landed first */
     });
@@ -302,19 +348,26 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
 
   /* The round is over — whoever comes out ahead credits themselves the win.
      Every client works out the same winner from the same synced room, so only
-     the one client sitting in first actually writes anything. */
-  const creditedRoundRef = useRef<number | null>(null);
+     the one client sitting in first actually writes anything.
+
+     Whether this round has already been credited is read off the seat
+     (`wonRound`), not remembered here. A ref starts out empty on every mount,
+     so reloading the round-over screen used to credit the same win again —
+     and again on every reload after. The ref is only there to stop this tab
+     sending the same write twice while the first is still in flight. */
+  const creditingRoundRef = useRef<number | null>(null);
   useEffect(() => {
     if (!roomId || !currentUid || !activeRoom) return;
     if (activeRoom.status !== "round-finished") return;
-    if (creditedRoundRef.current === activeRoom.round) return;
 
+    const mine = activeRoom.players?.[currentUid];
+    if (!mine || mine.wonRound === activeRoom.round) return;
+    if (creditingRoundRef.current === activeRoom.round) return;
     if (roundVictor(activeRoom) !== currentUid) return;
 
-    creditedRoundRef.current = activeRoom.round;
-    const mine = activeRoom.players[currentUid];
-    creditRoundWin(roomId, currentUid, mine?.roundsWon ?? 0).catch(() => {
-      creditedRoundRef.current = null; // let a retry happen on the next tick
+    creditingRoundRef.current = activeRoom.round;
+    creditRoundWin(roomId, currentUid, mine.roundsWon ?? 0, activeRoom.round).catch(() => {
+      creditingRoundRef.current = null; // let a retry happen on the next tick
     });
   }, [roomId, currentUid, activeRoom]);
 
@@ -323,19 +376,28 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
      per board (src/firebase/firestore.ts: `${uid}_${difficulty}`), so a later
      round only overwrites this one if it closed more boxes; a level round or
      a loss still lands, same as a solo game's isWin: false never did exist —
-     solo games always record, so this does too. */
+     solo games always record, so this does too.
+
+     Same trap as the round credit above: a ref alone forgot the round on
+     reload, and every refresh of the round-over screen wrote another history
+     row and bumped the profile's game count again. The seat is not ours to
+     record this on (the rules keep it to the room's own fields), so the device
+     remembers it instead — a result only this player can write, for only this
+     player's ledger. */
   const savedResultRoundRef = useRef<number | null>(null);
   useEffect(() => {
     if (!roomId || !currentUid || !activeRoom) return;
     if (activeRoom.gameType !== "dots-and-boxes") return;
     if (activeRoom.status !== "round-finished") return;
     if (savedResultRoundRef.current === activeRoom.round) return;
+    if (savedRoundOnDevice(roomId, currentUid) === activeRoom.round) return;
 
     const mine = activeRoom.players?.[currentUid];
     const gs = activeRoom.gameState;
     if (!mine || !isDotsBoard(gs)) return;
 
-    savedResultRoundRef.current = activeRoom.round;
+    const round = activeRoom.round;
+    savedResultRoundRef.current = round;
     const score = boxCounts(gs)[currentUid] ?? 0;
     const moves = Object.values(gs.edges ?? {}).filter((uid) => uid === currentUid).length;
 
@@ -350,9 +412,11 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
       timeSeconds: 0,
       completedAt: Date.now(),
       isWin: roundWinner(activeRoom.players, gs) === currentUid,
-    }).catch(() => {
-      savedResultRoundRef.current = null; // let a retry happen on the next tick
-    });
+    })
+      .then(() => rememberSavedRound(roomId, currentUid, round))
+      .catch(() => {
+        savedResultRoundRef.current = null; // let a retry happen on the next tick
+      });
   }, [roomId, currentUid, activeRoom]);
 
   /* A fresh round starts everyone back at zero. The dealer can only ever zero
@@ -387,17 +451,26 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
   const dealtRoundRef = useRef<number | null>(null);
   useEffect(() => {
     if (!roomId || !currentUid || !activeRoom) return;
-    if (activeRoom.status !== "round-finished") return;
     const proposal = activeRoom.nextRound;
     if (!proposal) return;
     if (activeRoom.gameState?.currentTurn !== currentUid) return;
     if (dealtRoundRef.current === activeRoom.round) return;
 
-    // Only the players actually here have to agree — a seat whose player is
-    // away is being kept for them, not waited on.
-    const seated = activeOrder(activeRoom.players ?? {});
-    const allReady = seated.length >= 2 && seated.every((uid) => proposal.readyPlayers?.[uid]);
-    if (!allReady) return;
+    /* A deal is two writes (see startNextRound). A room back in play, still
+       carrying the proposal, on a board with nothing left to take, is one whose
+       dealer went away between them — only the dealer holds the turn there, so
+       only the dealer's next tab can lay the board down and finish it. */
+    const halfDealt =
+      activeRoom.status === "playing" && isBoardCleared(activeRoom.gameState);
+    if (activeRoom.status !== "round-finished" && !halfDealt) return;
+
+    if (!halfDealt) {
+      // Only the players actually here have to agree — a seat whose player is
+      // away is being kept for them, not waited on.
+      const seated = activeOrder(activeRoom.players ?? {});
+      const allReady = seated.length >= 2 && seated.every((uid) => proposal.readyPlayers?.[uid]);
+      if (!allReady) return;
+    }
 
     dealtRoundRef.current = activeRoom.round;
     const board = dealBoard(
@@ -406,7 +479,8 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
       proposal.theme,
       nextPlayerUid(activeRoom.players, currentUid)
     );
-    startNextRound(roomId, currentUid, activeRoom.round, proposal, board).catch(() => {
+    const deal = halfDealt ? layNextRound : startNextRound;
+    deal(roomId, currentUid, activeRoom.round, proposal, board).catch(() => {
       dealtRoundRef.current = null;
     });
   }, [roomId, currentUid, activeRoom]);

@@ -198,9 +198,14 @@ const run = async () => {
   await check('anyone but the last turn holder cannot end the round', 'deny', 'PATCH', `rooms/${R2}`, 'mallory', { status: 'round-finished', finishedAt: SV });
   await check('the last turn holder ends the round', 'allow', 'PATCH', `rooms/${R2}`, 'alice', { status: 'round-finished', finishedAt: SV });
 
-  await check('a stranger cannot credit alice a round win', 'deny', 'PUT', `rooms/${R2}/players/${A}/roundsWon`, 'mallory', 1);
-  await check('alice cannot award herself two rounds at once', 'deny', 'PUT', `rooms/${R2}/players/${A}/roundsWon`, 'alice', 2);
-  await check('alice — actually ahead on score — credits her own win', 'allow', 'PUT', `rooms/${R2}/players/${A}/roundsWon`, 'alice', 1);
+  await check('a stranger cannot credit alice a round win', 'deny', 'PATCH', `rooms/${R2}/players/${A}`, 'mallory', { roundsWon: 1, wonRound: 1 });
+  await check('alice cannot award herself two rounds at once', 'deny', 'PATCH', `rooms/${R2}/players/${A}`, 'alice', { roundsWon: 2, wonRound: 1 });
+  await check('a win without the round it was for is refused', 'deny', 'PUT', `rooms/${R2}/players/${A}/roundsWon`, 'alice', 1);
+  await check('a win stamped for some other round is refused', 'deny', 'PATCH', `rooms/${R2}/players/${A}`, 'alice', { roundsWon: 1, wonRound: 2 });
+  await check('the stamp cannot be set without the win', 'deny', 'PUT', `rooms/${R2}/players/${A}/wonRound`, 'alice', 1);
+  await check('alice — actually ahead on score — credits her own win', 'allow', 'PATCH', `rooms/${R2}/players/${A}`, 'alice', { roundsWon: 1, wonRound: 1 });
+  // ROADMAP 0.12: a reload of the round-over screen used to credit this again.
+  await check('the same round cannot be credited twice', 'deny', 'PATCH', `rooms/${R2}/players/${A}`, 'alice', { roundsWon: 2, wonRound: 1 });
 
   await check('gameType cannot be changed directly between rounds', 'deny', 'PATCH', `rooms/${R2}`, 'alice', { gameType: 'word-match' });
 
@@ -226,7 +231,16 @@ const run = async () => {
   });
   await req('PUT', `rooms/${R2}/status`, 'ADMIN', 'round-finished');
 
-  await check('the last turn holder flips status to open the round', 'allow', 'PATCH', `rooms/${R2}`, 'alice', { status: 'playing', startedAt: SV });
+  // ROADMAP 0.13: the table took longer than a turn to agree, so last round's
+  // clock has long run out. Opening the round has to restart it, or the other
+  // seat may pass the turn out from under the dealer before the board lands.
+  await req('PUT', `rooms/${R2}/gameState/turnStartedAt`, 'ADMIN', Date.now() - 120_000);
+  await check('the last turn holder flips status to open the round, clock and all', 'allow', 'PATCH', `rooms/${R2}`, 'alice', {
+    status: 'playing', startedAt: SV, 'gameState/turnStartedAt': SV,
+  });
+  await check('...so the turn cannot be passed away before the deal lands', 'deny', 'PATCH', `rooms/${R2}/gameState`, 'mallory', {
+    currentTurn: M, flippedCards: null, turnStartedAt: SV,
+  });
   await check('...then deals the agreed-on game, gameType and all', 'allow', 'PATCH', `rooms/${R2}`, 'alice', {
     round: 2, gameType: 'word-match', difficulty: '4x4', theme: 'colors',
     gameState: { cards, currentTurn: M, matchedPairs: 0, totalPairs: 8, turnStartedAt: SV },
