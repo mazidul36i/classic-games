@@ -39,6 +39,15 @@ go out by hand (`firebase deploy --only firestore:indexes`).
 both queries; `/lobby/sequence?difficulty=6x6` → `/lobby/number-sequence?difficulty=6x6`;
 `/lobby/nonsense` → `/lobby/dots-and-boxes`; Word Match lobby has no deck picker.
 
+**Found during live verification: Dots and Boxes results were never recorded.**
+Nobody had a Dots row in history or on the leaderboard. The live Firestore ruleset
+was from 2026-09-13 and did not include the Dots rules from `9f987f1` (2026-09-15).
+Those rules were tested on the emulator but never deployed, so every save was
+refused, and the save's `catch` hid it. Deployed `firestore:rules`; round 2 of a
+live test table then recorded once per player and did not duplicate on reload.
+The save now logs failures, and the profile got a label for Dots and Boxes (it
+showed "?✦ dots and-boxes").
+
 **Not a bug.** The report's "lobby blank for 2–5s": nothing in the lobby waits on the
 network, and the panel is a 0.87s framer-motion fade. In the automation window
 `visibilityState` was `hidden` at 0 fps, and the panel stayed at `opacity: 0` for 7s+.

@@ -106,7 +106,9 @@ starts empty.
   expiry effect ignores a cleared board (`isBoardCleared`). Otherwise the other seats
   pass the turn away from the dealer between the two writes.
 - **Firestore composite indexes live in `firestore.indexes.json`**, and CI deploys
-  Hosting only, so run `firebase deploy --only firestore:indexes` (and the rules) by hand.
+  Hosting only, so run `firebase deploy --only firestore,database` by hand whenever the
+  rules or indexes change. Dots results were silently refused for two weeks because
+  `firestore.rules` shipped in a commit and was never deployed.
   A missing index throws `failed-precondition`, which a bare `catch` turns into an empty
   list. That's how profile history sat empty. — `FIX_LOG.md` 2026-09-28
 - The profile's `password` field is **intentional** (owner's decision). Do not remove

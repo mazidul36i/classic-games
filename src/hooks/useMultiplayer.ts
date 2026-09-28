@@ -414,7 +414,10 @@ export const useMultiplayer = (roomId: string | null, currentUid: string | null)
       isWin: roundWinner(activeRoom.players, gs) === currentUid,
     })
       .then(() => rememberSavedRound(roomId, currentUid, round))
-      .catch(() => {
+      .catch((err) => {
+        // Silent, this hid undeployed Firestore rules refusing every Dots
+        // result for two weeks (FIX_LOG 2026-09-28).
+        console.error("[room] saving the round result failed", err);
         savedResultRoundRef.current = null; // let a retry happen on the next tick
       });
   }, [roomId, currentUid, activeRoom]);

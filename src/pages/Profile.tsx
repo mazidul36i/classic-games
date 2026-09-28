@@ -16,10 +16,11 @@ const GAME_CARD: Record<string, { rank: string; suit: string; red: boolean; labe
   "number-sequence": { rank: "K", suit: "♦", red: true, label: "Number Sequence" },
   "pattern-memory": { rank: "Q", suit: "♣", red: false, label: "Pattern Memory" },
   "word-match": { rank: "J", suit: "♥", red: true, label: "Word Match" },
+  "dots-and-boxes": { rank: "10", suit: "♦", red: true, label: "Dots and Boxes" },
 };
 
 const cardFor = (game: string) =>
-  GAME_CARD[game] ?? { rank: "?", suit: "✦", red: false, label: game.replace("-", " ") };
+  GAME_CARD[game] ?? { rank: "?", suit: "✦", red: false, label: game.replace(/-/g, " ") };
 
 const formatTime = (secs: number) => {
   const m = Math.floor(secs / 60).toString().padStart(2, "0");
